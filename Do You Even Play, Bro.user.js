@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.0.1
+// @version      1.0.2
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -64,7 +64,7 @@ var formatMinutes = function(mins) {
                 return days.toPrecision(2) + " days";
             } else {
                 var years = days / 365;
-                return years.toPrecision(2);
+                return years.toPrecision(2) + " years";
             }
         }
     }
