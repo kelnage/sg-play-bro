@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.0.0
+// @version      1.0.1
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -123,7 +123,7 @@ var updateTableStats = function() {
         }
         $average_playtime.text(formatMinutes(playtime_total / winsCache.length));
         $total_playtime.text(formatMinutes(playtime_total));
-        $game_counts.text(playtime_game_count + ' with playtime, ' + achieved_game_count + '/' + achievement_game_count + ' with at least one achievement');
+        $game_counts.text(playtime_game_count + '/' + winsCache.length + ' with playtime, ' + achieved_game_count + '/' + achievement_game_count + ' with at least one achievement');
     }
 };
 
