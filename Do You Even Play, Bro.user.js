@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.0.2
+// @version      1.1.0
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_deleteValue
 // @connect      self
 // @connect      api.steampowered.com
 // @require      http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js
@@ -35,7 +36,12 @@ var $percentage = $('<div class="featured__table__row__right"></div>'),
     $average_playtime = $('<div class="featured__table__row__right"></div>'),
     $total_playtime = $('<div class="featured__table__row__right"></div>'),
     $game_counts = $('<div class="featured__table__row__right"></div>'),
-    $last_updated = $('<span title="" style="color: rgba(255,255,255,0.4)"></span>');
+    $last_updated = $('<span title="" style="color: rgba(255,255,255,0.4)"></span>'),
+    $rm_key_link = $('<a style="margin-left: 0.2em;color: rgba(255,255,255,0.6)" href="#">Delete cached API key</a>'),
+    $toolbar = $('<div id="sg_dyepb_toolbar" style="color: rgba(255,255,255,0.4)" class="nav__left-container"></div>'),
+    $fetch_button = $('<a class="nav__button" href="#">' + (GM_getValue(LAST_CACHE_KEY) ? 'Update Playing Info' : 'Fetch Playing Info' ) + '</a>'),
+    $key_button = $('<a class="nav__button" href="#">Provide API Key</a>'),
+    $button_container = $('<div class="nav__button-container"></div>');
 
 var playtimeCache = {},
     achievementCache = {},
@@ -74,8 +80,9 @@ var enhanceWonGames = function() {
     var $rows = $(".giveaway__row-inner-wrap");
     $rows.each(function() {
         var $this = $(this), $heading = $this.find(".giveaway__heading");
-        var id = $this.find("a.giveaway__icon").attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
-        if(id) {
+        var ga_icon = $this.find("a.giveaway__icon");
+        if(ga_icon && ga_icon.attr("href")) {
+            id = ga_icon.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
             var $playtimeSpan = $heading.find(".dyegb_playtime"), $achievementSpan = $heading.find(".dyegb_achievement");
             if(playtimeCache['a'+id[2]]) {
                 if($playtimeSpan.length > 0) {
@@ -134,9 +141,32 @@ var updateDisplayedCacheDate = function(t) {
     }
 };
 
+var displayButtons = function() {
+    if(!API_KEY_REGEXP.test(STEAM_API_KEY)) {
+        $key_button.show();
+        $fetch_button.hide();
+        $last_updated.empty();
+        $last_updated.attr("title", "");
+        $last_updated.append('<a style="color: rgba(255,255,255,0.6)" target="_blank" href="https://steamcommunity.com/dev/apikey">Click here to obtain a Steam API key</a>');
+        $rm_key_link.hide();
+    } else {
+        $fetch_button.show();
+        $key_button.hide();
+        $last_updated.empty(); // will be updated by updateDisplayedCacheDate
+        if(GM_getValue(LAST_CACHE_KEY)) {
+            $fetch_button.text("Update Playing Info");
+            updateDisplayedCacheDate(new Date(GM_getValue(LAST_CACHE_KEY)));
+        } else {
+            $fetch_button.text("Fetch Playing Info");
+        }
+        $rm_key_link.show();
+    }
+};
+
 var updatePage = function(update_time) {
     enhanceWonGames();
     updateTableStats();
+    displayButtons();
     updateDisplayedCacheDate(update_time);
 };
 
@@ -208,20 +238,16 @@ var fetchAchievementStats = function(gameAchievements, appid, steamID64, callbac
         $featured_table_col2 = $featured_table.children(":last-child");
     var wonGames = [], gamePlaytimes = {}, gameAchievements = {};
 
-    var $toolbar = $('<div id="sg_dyepb_toolbar" class="nav__left-container"></div>'),
-        $fetch_button = $('<a class="nav__button" href="#">' + (GM_getValue(LAST_CACHE_KEY) ? 'Update Playing Info' : 'Fetch Playing Info' ) + '</a>'),
-        $key_button = $('<a class="nav__button" href="#">Provide API Key</a>'),
-        $button_container = $('<div class="nav__button-container"></div>'),
-        $left_row_1 = $('<div class="featured__table__row"></div>'),
+    var $left_row_1 = $('<div class="featured__table__row"></div>'),
         $left_row_2 = $('<div class="featured__table__row"></div>'),
         $right_row_1 = $('<div class="featured__table__row"></div>'),
         $right_row_2 = $('<div class="featured__table__row"></div>');
-    if(!API_KEY_REGEXP.test(STEAM_API_KEY)) {
-        $button_container.append($key_button);
-        $last_updated.append('<a style="color: rgba(255,255,255,0.6)" target="_blank" href="https://steamcommunity.com/dev/apikey">Click here to obtain a Steam API key</a>');
-    } else {
-        $button_container.append($fetch_button);
-    }
+    $toolbar.append($button_container);
+    $button_container.append($key_button);
+    $button_container.append($fetch_button);
+    $toolbar.append($last_updated);
+    $toolbar.append($rm_key_link);
+    displayButtons();
     $left_row_1.append('<div class="featured__table__row__left">Average Playtime</div>');
     $left_row_1.append($average_playtime);
     $left_row_2.append('<div class="featured__table__row__left">Total Playtime</div>');
@@ -230,8 +256,6 @@ var fetchAchievementStats = function(gameAchievements, appid, steamID64, callbac
     $right_row_1.append($percentage);
     $right_row_2.append('<div class="featured__table__row__left">Win Counts</div>');
     $right_row_2.append($game_counts);
-    $toolbar.append($button_container);
-    $toolbar.append($last_updated);
     $featured_table_col1.append($left_row_1);
     $featured_table_col1.append($left_row_2);
     $featured_table_col2.append($right_row_1);
@@ -248,10 +272,15 @@ var fetchAchievementStats = function(gameAchievements, appid, steamID64, callbac
         }
         if(API_KEY_REGEXP.test(STEAM_API_KEY)) {
             GM_setValue("DYEPB_API_KEY", STEAM_API_KEY);
-            $button_container.empty();
-            $button_container.append($fetch_button);
-            $last_updated.empty();
+            displayButtons();
         }
+    });
+
+    $rm_key_link.click(function(e) {
+        e.preventDefault();
+        GM_deleteValue("DYEPB_API_KEY");
+        STEAM_API_KEY = "";
+        displayButtons();
     });
 
     $fetch_button.click(function(e) {
@@ -279,6 +308,5 @@ var fetchAchievementStats = function(gameAchievements, appid, steamID64, callbac
                 }
             });
         });
-        $fetch_button.text("Update Playing Info");
     });
 })();
