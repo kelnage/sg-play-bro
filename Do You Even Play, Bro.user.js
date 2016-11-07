@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.1.0
+// @version      1.1.1
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -94,8 +94,12 @@ var enhanceWonGames = function() {
             if(achievementCache['a'+id[2]] && achievementCache['a'+id[2]].total > 0) {
                 var counts = achievementCache['a'+id[2]];
                 if($achievementSpan.length > 0) {
-                    $achievementSpan.text(Number(counts.achieved / counts.total * 100).toPrecision(3) + "%");
-                    $achievementSpan.attr('title', counts.achieved + '/' + counts.total + ' achievements');
+                    if(counts.achieved == 0) {
+                        $achievementSpan.text("0%");
+                    } else {
+                        $achievementSpan.text(Number(counts.achieved / counts.total * 100).toPrecision(3) + "%");
+                        $achievementSpan.attr('title', counts.achieved + '/' + counts.total + ' achievements');
+                    }
                 } else {
                     $heading.append('<span class="dyegb_achievement giveaway__heading__thin" title="' + counts.achieved + '/' + counts.total + ' achievements">' +
                                     Number(counts.achieved / counts.total * 100).toPrecision(3) + '%</div>');
@@ -112,9 +116,9 @@ var updateTableStats = function() {
             var id = 'a'+winsCache[i].appid,
                 achievement_counts = achievementCache[id];
             if(achievement_counts && achievement_counts.total > 0) {
-                achievement_percentage_sum += (achievement_counts.achieved / achievement_counts.total) * 100;
                 achievement_game_count += 1;
                 if(achievement_counts.achieved > 0) {
+                    achievement_percentage_sum += (achievement_counts.achieved / achievement_counts.total) * 100;
                     achieved_game_count += 1;
                 }
             }
@@ -124,7 +128,7 @@ var updateTableStats = function() {
             }
         }
         if(achievement_game_count > 0) {
-            $percentage.text(Number(achievement_percentage_sum / achievement_game_count).toPrecision(3) + "%");
+            $percentage.text(Number(achievement_percentage_sum / achieved_game_count).toPrecision(3) + "%");
         } else {
             $percentage.text("N/A");
         }
