@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.1.3
+// @version      1.1.4
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -18,7 +18,7 @@
 // ==/UserScript==
 
 var username = $(".featured__heading__medium").text();
-var userID64 = $(".sidebar__shortcut-inner-wrap").children(":last-child").attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
+var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
 
 var WINS_URL = "https://www.steamgifts.com/user/" + username + "/giveaways/won/search";
 var PLAYTIME_URL = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"; // takes a steamid and API key
