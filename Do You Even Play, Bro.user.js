@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.1.2
+// @version      1.1.3
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -127,7 +127,7 @@ var updateTableStats = function() {
                 playtime_game_count += 1;
             }
         }
-        if(achievement_game_count > 0) {
+        if(achieved_game_count > 0) {
             $percentage.text(Number(achievement_percentage_sum / achieved_game_count).toPrecision(3) + "%");
         } else {
             $percentage.text("N/A");
