@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.1.1
+// @version      1.1.2
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -102,7 +102,7 @@ var enhanceWonGames = function() {
                     }
                 } else {
                     $heading.append('<span class="dyegb_achievement giveaway__heading__thin" title="' + counts.achieved + '/' + counts.total + ' achievements">' +
-                                    Number(counts.achieved / counts.total * 100).toPrecision(3) + '%</div>');
+                                    (counts.achieved > 0 ? Number(counts.achieved / counts.total * 100).toPrecision(3) : '0') + '%</div>');
                 }
             }
         }
