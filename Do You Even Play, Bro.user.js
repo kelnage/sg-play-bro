@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.1.4
+// @version      1.2.0
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -11,8 +11,8 @@
 // @grant        GM_deleteValue
 // @connect      self
 // @connect      api.steampowered.com
-// @require      http://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js
-// @require      http://courses.ischool.berkeley.edu/i290-4/f09/resources/gm_jq_xhr.js
+// @connect      store.steampowered.com
+// @require      https://code.jquery.com/jquery-1.12.4.min.js
 // @updateURL    https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.meta.js
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
@@ -30,22 +30,29 @@ var WAIT_MILLIS = 500;
 var PLAYTIME_CACHE_KEY = "DYEPB_PLAYTIME_CACHE_" + encodeURIComponent(username),
     ACHIEVEMENT_CACHE_KEY = "DYEPB_ACHIEVEMENT_CACHE_" + encodeURIComponent(username),
     WINS_CACHE_KEY = "DYEPB_WINS_CACHE_" + encodeURIComponent(username),
-    LAST_CACHE_KEY = "DYEPB_LAST_CACHED_" + encodeURIComponent(username);
+    LAST_CACHE_KEY = "DYEPB_LAST_CACHED_" + encodeURIComponent(username),
+    SUB_APPID_CACHE_KEY = "DYEPB_SUB_APPID_CACHE";
 
 var $percentage = $('<div class="featured__table__row__right"></div>'),
     $average_playtime = $('<div class="featured__table__row__right"></div>'),
     $total_playtime = $('<div class="featured__table__row__right"></div>'),
     $game_counts = $('<div class="featured__table__row__right"></div>'),
     $last_updated = $('<span title="" style="color: rgba(255,255,255,0.4)"></span>'),
-    $rm_key_link = $('<a style="margin-left: 0.2em;color: rgba(255,255,255,0.6)" href="#">Delete cached API key</a>'),
+    $progress_text = $('<span style="margin-left: 0.3em"></span>'),
+    $rm_key_link = $('<a style="margin-left: 0.5em;color: rgba(255,255,255,0.6)" href="#">Delete cached API key</a>'),
     $toolbar = $('<div id="sg_dyepb_toolbar" style="color: rgba(255,255,255,0.4)" class="nav__left-container"></div>'),
     $fetch_button = $('<a class="nav__button" href="#">' + (GM_getValue(LAST_CACHE_KEY) ? 'Update Playing Info' : 'Fetch Playing Info' ) + '</a>'),
     $key_button = $('<a class="nav__button" href="#">Provide API Key</a>'),
-    $button_container = $('<div class="nav__button-container"></div>');
+    $button_container = $('<div class="nav__button-container"></div>'),
+    $progress_container = $('<div id="progress" style="margin: 0.5em 0"><img src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/0.16.1/images/loader-large.gif" height="10px" width="10px" /></div>');
 
 var playtimeCache = {},
     achievementCache = {},
-    winsCache = [];
+    winsCache = {},
+    subAppIdsCache = {},
+    activeRequests = 0,
+    errorCount = 0,
+    run_status = "STOPPED"; // can be STOPPED, PLAYTIME, WON_GAMES, ACHIEVEMENTS
 
 if(GM_getValue(PLAYTIME_CACHE_KEY)) {
     playtimeCache = JSON.parse(GM_getValue(PLAYTIME_CACHE_KEY));
@@ -54,10 +61,29 @@ if(GM_getValue(ACHIEVEMENT_CACHE_KEY)) {
     achievementCache = JSON.parse(GM_getValue(ACHIEVEMENT_CACHE_KEY));
 }
 if(GM_getValue(WINS_CACHE_KEY)) {
-    winsCache = JSON.parse(GM_getValue(WINS_CACHE_KEY));
+    var tempWinsCache = JSON.parse(GM_getValue(WINS_CACHE_KEY));
+    if(Array.isArray(tempWinsCache)) { // convert old array into an object
+        for(var i = 0; i < tempWinsCache.length; i++) {
+            winsCache['a'+tempWinsCache[i].appid] = tempWinsCache[i].appid;
+        }
+    } else {
+        winsCache = tempWinsCache;
+    }
+}
+if(GM_getValue(SUB_APPID_CACHE_KEY)) {
+    subAppIdsCache = JSON.parse(GM_getValue(SUB_APPID_CACHE_KEY));
 }
 
+var errorFn = function(response) {
+    activeRequests -= 1;
+    errorCount += 1;
+    console.log("Error details: ", response.status, response.responseText);
+};
+
 var formatMinutes = function(mins) {
+    if(isNaN(mins)) {
+        return "N/A";
+    }
     if(mins < 60) {
         return mins.toPrecision(2) + " minutes";
     } else {
@@ -76,6 +102,30 @@ var formatMinutes = function(mins) {
     }
 };
 
+var enhanceRow = function($heading, minutesPlayed, achievementCounts) {
+    var $playtimeSpan = $heading.find(".dyegb_playtime"), $achievementSpan = $heading.find(".dyegb_achievement");
+    if(minutesPlayed) {
+        if($playtimeSpan.length > 0) {
+            $playtimeSpan.text(formatMinutes(minutesPlayed));
+        } else {
+            $heading.append('<span class="dyegb_playtime giveaway__heading__thin">' + formatMinutes(minutesPlayed) + '</span>');
+        }
+    }
+    if(achievementCounts && achievementCounts.total > 0) {
+        if($achievementSpan.length > 0) {
+            if(achievementCounts.achieved === 0) {
+                $achievementSpan.text("0%");
+            } else {
+                $achievementSpan.text(Number(achievementCounts.achieved / achievementCounts.total * 100).toPrecision(3) + "%");
+                $achievementSpan.attr('title', achievementCounts.achieved + '/' + achievementCounts.total + ' achievements');
+            }
+        } else {
+            $heading.append('<span class="dyegb_achievement giveaway__heading__thin" title="' + achievementCounts.achieved + '/' + achievementCounts.total + ' achievements">' +
+                            (achievementCounts.achieved > 0 ? Number(achievementCounts.achieved / achievementCounts.total * 100).toPrecision(3) : '0') + '%</div>');
+        }
+    }
+};
+
 var enhanceWonGames = function() {
     var $rows = $(".giveaway__row-inner-wrap");
     $rows.each(function() {
@@ -83,80 +133,82 @@ var enhanceWonGames = function() {
         var ga_icon = $this.find("a.giveaway__icon");
         if(ga_icon && ga_icon.attr("href")) {
             id = ga_icon.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
-            var $playtimeSpan = $heading.find(".dyegb_playtime"), $achievementSpan = $heading.find(".dyegb_achievement");
-            if(playtimeCache['a'+id[2]]) {
-                if($playtimeSpan.length > 0) {
-                    $playtimeSpan.text(formatMinutes(playtimeCache['a'+id[2]]));
-                } else {
-                    $heading.append('<span class="dyegb_playtime giveaway__heading__thin">' + formatMinutes(playtimeCache['a'+id[2]]) + '</span>');
-                }
-            }
-            if(achievementCache['a'+id[2]] && achievementCache['a'+id[2]].total > 0) {
-                var counts = achievementCache['a'+id[2]];
-                if($achievementSpan.length > 0) {
-                    if(counts.achieved == 0) {
-                        $achievementSpan.text("0%");
-                    } else {
-                        $achievementSpan.text(Number(counts.achieved / counts.total * 100).toPrecision(3) + "%");
-                        $achievementSpan.attr('title', counts.achieved + '/' + counts.total + ' achievements');
+            if(id[1] == "sub" || id[1] == "subs") {
+                var totalMinutes = 0, totalAchievements = {achieved: 0, total: 0};
+                if(subAppIdsCache['s'+id[2]]) {
+                    var appids = subAppIdsCache['s'+id[2]];
+                    for(var i = 0; i < appids.length; i++) {
+                        if(playtimeCache['a'+appids[i]]) {
+                            totalMinutes += playtimeCache['a'+appids[i]];
+                        }
+                        if(achievementCache['a'+appids[i]]) {
+                            totalAchievements.achieved += achievementCache['a'+appids[i]].achieved;
+                            totalAchievements.achieved += achievementCache['a'+appids[i]].total;
+                        }
                     }
-                } else {
-                    $heading.append('<span class="dyegb_achievement giveaway__heading__thin" title="' + counts.achieved + '/' + counts.total + ' achievements">' +
-                                    (counts.achieved > 0 ? Number(counts.achieved / counts.total * 100).toPrecision(3) : '0') + '%</div>');
                 }
+                enhanceRow($heading, totalMinutes, totalAchievements);
+            }
+            if(id[1] == "app" || id[1] == "apps") {
+                enhanceRow($heading, playtimeCache['a'+id[2]], achievementCache['a'+id[2]]);
             }
         }
     });
 };
 
 var updateTableStats = function() {
-    var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0, playtime_total = 0, playtime_game_count = 0;
-    if(winsCache.length > 0) {
-        for(var i = 0; i < winsCache.length; i++) {
-            var id = 'a'+winsCache[i].appid,
-                achievement_counts = achievementCache[id];
-            if(achievement_counts && achievement_counts.total > 0) {
-                achievement_game_count += 1;
-                if(achievement_counts.achieved > 0) {
-                    achievement_percentage_sum += (achievement_counts.achieved / achievement_counts.total) * 100;
-                    achieved_game_count += 1;
-                }
-            }
-            if(playtimeCache[id]) {
-                playtime_total += playtimeCache[id];
-                playtime_game_count += 1;
+    var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0,
+        playtime_total = 0, playtime_game_count = 0, win_count = 0;
+    $.each(winsCache, function(aid, appid) {
+        win_count += 1;
+        var achievement_counts = achievementCache[aid];
+        if(achievement_counts && achievement_counts.total > 0) {
+            achievement_game_count += 1;
+            if(achievement_counts.achieved > 0) {
+                achievement_percentage_sum += (achievement_counts.achieved / achievement_counts.total) * 100;
+                achieved_game_count += 1;
             }
         }
-        if(achieved_game_count > 0) {
-            $percentage.text(Number(achievement_percentage_sum / achieved_game_count).toPrecision(3) + "%");
-        } else {
-            $percentage.text("N/A");
+        if(playtimeCache[aid]) {
+            playtime_total += playtimeCache[aid];
+            playtime_game_count += 1;
         }
-        $average_playtime.text(formatMinutes(playtime_total / winsCache.length));
-        $total_playtime.text(formatMinutes(playtime_total));
-        $game_counts.text(playtime_game_count + '/' + winsCache.length + ' with playtime, ' + achieved_game_count + '/' + achievement_game_count + ' with at least one achievement');
+    });
+    if(achieved_game_count > 0) {
+        $percentage.text(Number(achievement_percentage_sum / achieved_game_count).toPrecision(3) + "%");
+    } else {
+        $percentage.text("N/A");
     }
+    $average_playtime.text(formatMinutes(playtime_total / win_count));
+    $total_playtime.text(formatMinutes(playtime_total));
+    $game_counts.text(playtime_game_count + '/' + win_count + ' with playtime, ' + achieved_game_count + '/' + achievement_game_count + ' with at least one achievement');
 };
 
 var updateDisplayedCacheDate = function(t) {
     if(t) {
-        $last_updated.text('Last retrieved: ' + t.toLocaleDateString());
+        $last_updated.text('Last retrieved: ' + t.toLocaleDateString() + (errorCount > 0 ? ", with " + errorCount + " API query errors" : ""));
         $last_updated.attr('title', t.toLocaleString());
     }
 };
 
 var displayButtons = function() {
     if(!API_KEY_REGEXP.test(STEAM_API_KEY)) {
+        $button_container.show();
+        $progress_container.hide();
         $key_button.show();
         $fetch_button.hide();
         $last_updated.empty();
         $last_updated.attr("title", "");
+        $last_updated.show();
         $last_updated.append('<a style="color: rgba(255,255,255,0.6)" target="_blank" href="https://steamcommunity.com/dev/apikey">Click here to obtain a Steam API key</a>');
         $rm_key_link.hide();
-    } else {
+    } else if(run_status == "STOPPED") {
+        $button_container.show();
+        $progress_container.hide();
         $fetch_button.show();
         $key_button.hide();
         $last_updated.empty(); // will be updated by updateDisplayedCacheDate
+        $last_updated.show();
         if(GM_getValue(LAST_CACHE_KEY)) {
             $fetch_button.text("Update Playing Info");
             updateDisplayedCacheDate(new Date(GM_getValue(LAST_CACHE_KEY)));
@@ -164,6 +216,18 @@ var displayButtons = function() {
             $fetch_button.text("Fetch Playing Info");
         }
         $rm_key_link.show();
+    } else {
+        $button_container.hide();
+        $progress_container.show();
+        if(run_status == "PLAYTIMES") {
+            $progress_text.text("Retriving " + username + "'s logged playing times");
+        } else if(run_status == "WON_GAMES") {
+            $progress_text.text("Retriving " + username + "'s won games");
+        } else if(run_status == "ACHIEVEMENTS") {
+            $progress_text.text("Retriving " + username + "'s achievement progress (" + activeRequests + " games left to check)");
+        }
+        $last_updated.hide();
+        $rm_key_link.hide();
     }
 };
 
@@ -174,64 +238,138 @@ var updatePage = function(update_time) {
     updateDisplayedCacheDate(update_time);
 };
 
+var extractSubGames = function(sub, page) {
+    subAppIdsCache['s'+sub] = [];
+    $(".tab_item", page).each(function(i, e) {
+        var $this = $(e),
+            appId = $this.attr("data-ds-appid"),
+            name = $this.find(".tab_item_name").text(),
+            $link = $this.find(".tab_item_overlay");
+        if($link.attr("href") && !winsCache['a'+appId]) {
+            var type = $link.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/[0-9]*\//);
+            winsCache['a'+appId] = appId;
+        }
+        subAppIdsCache['s'+sub].push(appId);
+    });
+};
+
 var extractWon = function(page) {
-    return $(".giveaway__row-inner-wrap", page)
+    $(".giveaway__row-inner-wrap", page)
         .filter(function(i) {
             return $(this).find("div.giveaway__column--positive").length == 1;
         })
-        .map(function() {
-            var ga_icon = $(this).find("a.giveaway__icon");
+        .each(function(i, e) {
+            var ga_icon = $(e).find("a.giveaway__icon");
             if(ga_icon.length === 1 && ga_icon.attr("href")) {
-                var id = $(this).find("a.giveaway__icon").attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
-                return {"name":  $(this).find("a.giveaway__heading__name").text(), "appid": id[2], "type": id[1]};
+                var url = $(e).find("a.giveaway__icon").attr("href"),
+                    id = url.match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
+                if((id[1] == "sub" || id[1] == "subs") && !subAppIdsCache['s'+id[2]]) { // only fetch appids for uncached-subs - do subs ever change? Probably...
+                    activeRequests += 1;
+                    GM_xmlhttpRequest({
+                        "method": "GET",
+                        "url": url,
+                        "onload": function(response) {
+                            extractSubGames(id[2], response.responseText);
+                            activeRequests -= 1;
+                        },
+                        "onabort": errorFn,
+                        "onerror": errorFn,
+                        "ontimeout": errorFn
+                    });
+                } else if((id[1] == "app" || id[1] == "apps") && !winsCache['a'+id[2]]) {
+                    winsCache['a'+id[2]] = id[2];
+                }
+            }
+        });
+};
+
+var fetchWon = function(page, callback) {
+    activeRequests += 1;
+    GM_xmlhttpRequest({
+        "method": "GET",
+        "url": WINS_URL + "?page=" + page,
+        "onload": function(response) {
+            extractWon(response.responseText);
+            if($("div.pagination__navigation > a > span:contains('Next')", response.responseText).length === 1) {
+                setTimeout(function() {
+                    fetchWon(page + 1, callback);
+                }, WAIT_MILLIS);
             } else {
-                return {"name":  $(this).find("a.giveaway__heading__name").text(), "appid": null, "type": null};
+                callback();
             }
-        })
-        .get(); // turns the result into a JS array
-};
-
-var fetchWon = function(wonGames, page, callback) {
-    $.get(WINS_URL, {"page": page}, function(data) {
-        // console.log(data);
-        var wins = extractWon(data);
-        wonGames = wonGames.concat(wins.filter(function(win) { return win.type == "app" || win.type == "apps"; }));
-        if($("div.pagination__navigation > a > span:contains('Next')", data).length === 1) {
-            setTimeout(function() {
-                fetchWon(wonGames, page + 1, callback);
-            }, WAIT_MILLIS);
-        } else {
-            callback(wonGames);
-        }
+            activeRequests -= 1;
+        },
+        "onabort": errorFn,
+        "onerror": errorFn,
+        "ontimeout": errorFn
     });
 };
 
-var fetchGamePlaytimes = function(gamePlaytimes, steamID64, callback) {
-    $.getJSON(PLAYTIME_URL, {"steamid": steamID64, "key": STEAM_API_KEY}, function(data) {
-        // console.log(data);
-        var games = data.response.games;
-        if(games) {
-            for(var i = 0; i < games.length; i++) {
-                gamePlaytimes["a"+games[i].appid] = games[i].playtime_forever;
+var fetchGamePlaytimes = function(steamID64, callback) {
+    activeRequests += 1;
+    GM_xmlhttpRequest({
+        "method": "GET",
+        "url": PLAYTIME_URL + "?steamid=" + steamID64 + "&key=" + STEAM_API_KEY,
+        "onload": function(response) {
+            var data;
+            try {
+                 data = JSON.parse(response.responseText);
+            } catch(err) {
+                errorFn({"status": response.status, "responseText": response.responseText});
             }
-        }
-        callback();
+            if(data) {
+                var games = data.response.games;
+                if(games) {
+                    for(var i = 0; i < games.length; i++) {
+                        playtimeCache["a"+games[i].appid] = games[i].playtime_forever;
+                    }
+                }
+                activeRequests -= 1;
+                callback();
+            }
+        },
+        "onabort": errorFn,
+        "onerror": errorFn,
+        "ontimeout": errorFn
     });
 };
 
-var fetchAchievementStats = function(gameAchievements, appid, steamID64, callback) {
-    $.getJSON(ACHIEVEMENTS_URL, {"appid": appid, "steamid": steamID64, "key": STEAM_API_KEY}, function(data) {
-        // console.log(data);
-        var achievements = data.playerstats.achievements;
-        if(achievements) {
-            var achieved = achievements.filter(function(achievement) { return achievement.achieved == 1; }).length;
-            var total = achievements.length;
-            gameAchievements["a"+appid] = {"achieved": achieved, "total": total};
-        } else {
-            gameAchievements["a"+appid] = {"achieved": 0, "total": 0};
-        }
-        callback(gameAchievements["a"+appid]);
-    });
+var fetchAchievementStatsFn = function(appid, steamID64) {
+    return function() {
+        GM_xmlhttpRequest({
+            "method": "GET",
+            "url": ACHIEVEMENTS_URL + "?appid=" + appid + "&steamid=" + steamID64 + "&key=" + STEAM_API_KEY,
+            "onload": function(response) {
+                var data;
+                try {
+                    data = JSON.parse(response.responseText);
+                } catch(err) {
+                    errorFn({"status": response.status, "responseText": response.responseText});
+                }
+                if(data) {
+                    achievements = data.playerstats.achievements;
+                    if(achievements) {
+                        var achieved = achievements.filter(function(achievement) { return achievement.achieved == 1; }).length;
+                        var total = achievements.length;
+                        achievementCache["a"+appid] = {"achieved": achieved, "total": total};
+                    } else {
+                        achievementCache["a"+appid] = {"achieved": 0, "total": 0};
+                    }
+                    activeRequests -= 1;
+                }
+            },
+            "onabort": errorFn,
+            "onerror": errorFn,
+            "ontimeout": errorFn
+        });
+    };
+};
+
+var cacheJSONValue = function(key, value) {
+    GM_setValue(key, JSON.stringify(value));
+    var updateTime = new Date();
+    GM_setValue(LAST_CACHE_KEY, updateTime.getTime());
+    updatePage(updateTime);
 };
 
 (function() {
@@ -240,7 +378,6 @@ var fetchAchievementStats = function(gameAchievements, appid, steamID64, callbac
     var $featured_table = $(".featured__table"),
         $featured_table_col1 = $featured_table.children(":first-child"),
         $featured_table_col2 = $featured_table.children(":last-child");
-    var wonGames = [], gamePlaytimes = {}, gameAchievements = {};
 
     var $left_row_1 = $('<div class="featured__table__row"></div>'),
         $left_row_2 = $('<div class="featured__table__row"></div>'),
@@ -249,9 +386,10 @@ var fetchAchievementStats = function(gameAchievements, appid, steamID64, callbac
     $toolbar.append($button_container);
     $button_container.append($key_button);
     $button_container.append($fetch_button);
+    $toolbar.append($progress_container);
+    $progress_container.append($progress_text);
     $toolbar.append($last_updated);
     $toolbar.append($rm_key_link);
-    displayButtons();
     $left_row_1.append('<div class="featured__table__row__left">Average Playtime</div>');
     $left_row_1.append($average_playtime);
     $left_row_2.append('<div class="featured__table__row__left">Total Playtime</div>');
@@ -289,27 +427,43 @@ var fetchAchievementStats = function(gameAchievements, appid, steamID64, callbac
 
     $fetch_button.click(function(e) {
         e.preventDefault();
-        fetchGamePlaytimes(gamePlaytimes, userID64, function() {
-            playtimeCache = gamePlaytimes;
-            GM_setValue(PLAYTIME_CACHE_KEY, JSON.stringify(gamePlaytimes));
-            var updateTime = new Date();
-            GM_setValue(LAST_CACHE_KEY, updateTime.getTime());
-            updatePage(updateTime);
-            fetchWon(wonGames, 1, function(wonGames) {
-                winsCache = wonGames;
-                GM_setValue(WINS_CACHE_KEY, JSON.stringify(wonGames));
-                var updateTime = new Date();
-                GM_setValue(LAST_CACHE_KEY, updateTime.getTime());
-                updatePage(updateTime);
-                for(var i = 0; i < wonGames.length; i++) {
-                    fetchAchievementStats(gameAchievements, wonGames[i].appid, userID64, function(achievement_counts) {
-                        achievementCache = gameAchievements;
-                        GM_setValue(ACHIEVEMENT_CACHE_KEY, JSON.stringify(gameAchievements));
-                        var updateTime = new Date();
-                        GM_setValue(LAST_CACHE_KEY, updateTime.getTime());
-                        updatePage(updateTime);
-                    });
-                }
+        activeRequests = 0;
+        errorCount = 0;
+        run_status = "PLAYTIMES";
+        displayButtons();
+        fetchGamePlaytimes(userID64, function() {
+            run_status = "WON_GAMES";
+            cacheJSONValue(PLAYTIME_CACHE_KEY, playtimeCache);
+            fetchWon(1, function() {
+                var intervalId = setInterval(function() {
+                    if(activeRequests === 0) {
+                        clearInterval(intervalId);
+                        run_status = "ACHIEVEMENTS";
+                        cacheJSONValue(WINS_CACHE_KEY, winsCache);
+                        cacheJSONValue(SUB_APPID_CACHE_KEY, subAppIdsCache);
+                        var i = 0;
+                        $.each(winsCache, function(id, appid) {
+                            activeRequests += 1;
+                            // increment delay to try to prevent overloading of Steam API
+                            setTimeout(fetchAchievementStatsFn(appid, userID64), i * 50);
+                            i += 1;
+                        });
+                        intervalId = setInterval(function() {
+                            if(activeRequests === 0) {
+                                clearInterval(intervalId);
+                                run_status = "STOPPED";
+                                cacheJSONValue(ACHIEVEMENT_CACHE_KEY, achievementCache);
+                                console.log("Errors during API queries:", errorCount);
+                            } else {
+                                displayButtons();
+                                console.log("Active achievement requests:", activeRequests);
+                            }
+                        }, 500);
+                    } else {
+                        displayButtons();
+                        console.log("Active game requests:", activeRequests);
+                    }
+                }, 250);
             });
         });
     });
