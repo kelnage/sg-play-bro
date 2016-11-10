@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.2.0
+// @version      1.2.1
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -129,10 +129,10 @@ var enhanceRow = function($heading, minutesPlayed, achievementCounts) {
 var enhanceWonGames = function() {
     var $rows = $(".giveaway__row-inner-wrap");
     $rows.each(function() {
-        var $this = $(this), $heading = $this.find(".giveaway__heading");
-        var ga_icon = $this.find("a.giveaway__icon");
-        if(ga_icon && ga_icon.attr("href")) {
-            id = ga_icon.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
+        var $this = $(this), $heading = $this.find(".giveaway__heading"),
+            $ga_icon = $this.find("a.giveaway__icon:has(i.fa-steam)");
+        if($ga_icon && $ga_icon.attr("href")) {
+            var id = $ga_icon.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
             if(id[1] == "sub" || id[1] == "subs") {
                 var totalMinutes = 0, totalAchievements = {achieved: 0, total: 0};
                 if(subAppIdsCache['s'+id[2]]) {
@@ -254,14 +254,15 @@ var extractSubGames = function(sub, page) {
 };
 
 var extractWon = function(page) {
+    var extractCount = 0;
     $(".giveaway__row-inner-wrap", page)
         .filter(function(i) {
             return $(this).find("div.giveaway__column--positive").length == 1;
         })
         .each(function(i, e) {
-            var ga_icon = $(e).find("a.giveaway__icon");
-            if(ga_icon.length === 1 && ga_icon.attr("href")) {
-                var url = $(e).find("a.giveaway__icon").attr("href"),
+            var $ga_icon = $(e).find("a.giveaway__icon:has(i.fa-steam)");
+            if($ga_icon.length === 1 && $ga_icon.attr("href")) {
+                var url = $ga_icon.attr("href"),
                     id = url.match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
                 if((id[1] == "sub" || id[1] == "subs") && !subAppIdsCache['s'+id[2]]) { // only fetch appids for uncached-subs - do subs ever change? Probably...
                     activeRequests += 1;
@@ -276,11 +277,14 @@ var extractWon = function(page) {
                         "onerror": errorFn,
                         "ontimeout": errorFn
                     });
+                    extractCount += 1;
                 } else if((id[1] == "app" || id[1] == "apps") && !winsCache['a'+id[2]]) {
                     winsCache['a'+id[2]] = id[2];
+                    extractCount += 1;
                 }
             }
         });
+    return extractCount;
 };
 
 var fetchWon = function(page, callback) {
@@ -289,8 +293,9 @@ var fetchWon = function(page, callback) {
         "method": "GET",
         "url": WINS_URL + "?page=" + page,
         "onload": function(response) {
-            extractWon(response.responseText);
-            if($("div.pagination__navigation > a > span:contains('Next')", response.responseText).length === 1) {
+            var count = extractWon(response.responseText);
+            // stop fetching pages if no new wins found on current page
+            if($("div.pagination__navigation > a > span:contains('Next')", response.responseText).length === 1 && count > 0) {
                 setTimeout(function() {
                     fetchWon(page + 1, callback);
                 }, WAIT_MILLIS);
