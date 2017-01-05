@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.2.1
+// @version      1.2.2
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -414,7 +414,7 @@ var cacheJSONValue = function(key, value) {
     $key_button.click(function(e) {
         e.preventDefault();
         STEAM_API_KEY = prompt('Please provide your Steam API key');
-        while(STEAM_API_KEY !== "" && !API_KEY_REGEXP.test(STEAM_API_KEY)) {
+        while(STEAM_API_KEY !== "" && STEAM_API_KEY !== null && !API_KEY_REGEXP.test(STEAM_API_KEY)) {
             STEAM_API_KEY = prompt('Please provide your valid Steam API key');
         }
         if(API_KEY_REGEXP.test(STEAM_API_KEY)) {
