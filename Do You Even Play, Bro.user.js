@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.3.1
+// @version      1.3.2
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -31,7 +31,8 @@ var PLAYTIME_CACHE_KEY = "DYEPB_PLAYTIME_CACHE_" + encodeURIComponent(username),
     ACHIEVEMENT_CACHE_KEY = "DYEPB_ACHIEVEMENT_CACHE_" + encodeURIComponent(username),
     WINS_CACHE_KEY = "DYEPB_WINS_CACHE_" + encodeURIComponent(username),
     LAST_CACHE_KEY = "DYEPB_LAST_CACHED_" + encodeURIComponent(username),
-    SUB_APPID_CACHE_KEY = "DYEPB_SUB_APPID_CACHE";
+    SUB_APPID_CACHE_KEY = "DYEPB_SUB_APPID_CACHE",
+    SUB_APPID_CACHE_DATE_KEY = "DYEPB_SUB_APPID_CACHE_DATE";
 
 var $percentage = $('<div class="featured__table__row__right"></div>'),
     $average_playtime = $('<div class="featured__table__row__right"></div>'),
@@ -71,7 +72,11 @@ if(GM_getValue(WINS_CACHE_KEY)) {
     }
 }
 if(GM_getValue(SUB_APPID_CACHE_KEY)) {
-    subAppIdsCache = JSON.parse(GM_getValue(SUB_APPID_CACHE_KEY));
+    if(!GM_getValue(SUB_APPID_CACHE_DATE_KEY)) {
+        subAppIdsCache = {}; // ignore old caches
+    } else {
+        subAppIdsCache = JSON.parse(GM_getValue(SUB_APPID_CACHE_KEY));
+    }
 }
 
 var errorFn = function(response) {
@@ -280,7 +285,11 @@ var extractWon = function(page) {
                         "method": "GET",
                         "url": url,
                         "onload": function(response) {
-                            extractSubGames(id[2], response.responseText);
+                            if(response.finalUrl === url) { // if not, probably got redirected to Steam homepage
+                                extractSubGames(id[2], response.responseText);
+                            } else {
+                                console.log("Could not get details for sub " + id[2]);
+                            }
                             activeRequests -= 1;
                         },
                         "onabort": errorFn,
@@ -456,6 +465,7 @@ var cacheJSONValue = function(key, value) {
                         run_status = "ACHIEVEMENTS";
                         cacheJSONValue(WINS_CACHE_KEY, winsCache);
                         cacheJSONValue(SUB_APPID_CACHE_KEY, subAppIdsCache);
+                        GM_setValue(SUB_APPID_CACHE_DATE_KEY, new Date().getTime());
                         var i = 0;
                         $.each(winsCache, function(id, appid) {
                             activeRequests += 1;
