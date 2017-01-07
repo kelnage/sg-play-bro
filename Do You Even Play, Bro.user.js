@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.3.0
+// @version      1.3.1
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -119,11 +119,13 @@ var enhanceRow = function($heading, minutesPlayed, achievementCounts) {
         if(achievementCounts.achieved === 0) {
             $achievementSpan.text("0%");
         } else {
-            $achievementSpan.addClass("giveaway__column--positive");
+            $achievementSpan.attr('style', "font-weight: bold");
             $achievementSpan.text(formatPercentage(achievementCounts.achieved, achievementCounts.total, 3));
             $achievementSpan.attr('title', achievementCounts.achieved + '/' + achievementCounts.total + ' achievements');
             if(achievementCounts.achieved == achievementCounts.total) {
-                $achievementSpan.attr('style', "font-weight: bold");
+                $achievementSpan.attr('style', "font-weight: bold; color: rgb(91, 192, 222)");
+            } else {
+                $achievementSpan.addClass("giveaway__column--positive");
             }
         }
     }
@@ -182,7 +184,11 @@ var updateTableStats = function() {
     } else {
         $percentage.text("N/A");
     }
-    $average_playtime.text(formatMinutes(playtime_total / win_count));
+    if(playtime_game_count !== win_count) {
+        $average_playtime.text(formatMinutes(playtime_total / win_count) + " per win, " + formatMinutes(playtime_total / playtime_game_count) + " per played win");
+    } else {
+        $average_playtime.text(formatMinutes(playtime_total / win_count) + " in all wins");
+    }
     $total_playtime.text(formatMinutes(playtime_total));
     $game_counts.text(formatPercentage(playtime_game_count, win_count, 3) + " (" + playtime_game_count + '/' + win_count + ') with playtime, ' +
                       formatPercentage(achieved_game_count, achievement_game_count, 3) + " (" + achieved_game_count + '/' + achievement_game_count + ') with ≥1 achievement');
