@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.3.3
+// @version      1.3.4
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -17,7 +17,7 @@
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,3,3];
+var CURRENT_VERSION = [1,3,4];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
@@ -107,8 +107,10 @@ var formatMinutes = function(mins) {
             return hours.toPrecision(2) + " hours";
         } else if(hours < 1000) {
             return hours.toPrecision(3) + " hours";
-        } else {
+        } else if(hours < 10000) {
             return hours.toPrecision(4) + " hours";
+        } else {
+            return hours.toPrecision(5) + " hours";
         }
     }
 };
@@ -159,7 +161,7 @@ var enhanceWonGames = function() {
                         }
                         if(achievementCache['a'+appids[i]]) {
                             totalAchievements.achieved += achievementCache['a'+appids[i]].achieved;
-                            totalAchievements.achieved += achievementCache['a'+appids[i]].total;
+                            totalAchievements.total += achievementCache['a'+appids[i]].total;
                         }
                     }
                 }
