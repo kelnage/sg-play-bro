@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.3.2
+// @version      1.3.3
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -17,6 +17,8 @@
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
+var CURRENT_VERSION = [1,3,3];
+
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
 
@@ -31,8 +33,9 @@ var PLAYTIME_CACHE_KEY = "DYEPB_PLAYTIME_CACHE_" + encodeURIComponent(username),
     ACHIEVEMENT_CACHE_KEY = "DYEPB_ACHIEVEMENT_CACHE_" + encodeURIComponent(username),
     WINS_CACHE_KEY = "DYEPB_WINS_CACHE_" + encodeURIComponent(username),
     LAST_CACHE_KEY = "DYEPB_LAST_CACHED_" + encodeURIComponent(username),
+    USER_CACHE_VERSION_KEY = "DYEPB_USER_CACHE_VERSION_" + encodeURIComponent(username),
     SUB_APPID_CACHE_KEY = "DYEPB_SUB_APPID_CACHE",
-    SUB_APPID_CACHE_DATE_KEY = "DYEPB_SUB_APPID_CACHE_DATE";
+    SUB_APPID_CACHE_VERSION_KEY = "DYEPB_SUB_APPID_CACHE_VERSION";
 
 var $percentage = $('<div class="featured__table__row__right"></div>'),
     $average_playtime = $('<div class="featured__table__row__right"></div>'),
@@ -55,26 +58,26 @@ var playtimeCache = {},
     errorCount = 0,
     run_status = "STOPPED"; // can be STOPPED, PLAYTIME, WON_GAMES, ACHIEVEMENTS
 
-if(GM_getValue(PLAYTIME_CACHE_KEY)) {
-    playtimeCache = JSON.parse(GM_getValue(PLAYTIME_CACHE_KEY));
-}
-if(GM_getValue(ACHIEVEMENT_CACHE_KEY)) {
-    achievementCache = JSON.parse(GM_getValue(ACHIEVEMENT_CACHE_KEY));
-}
-if(GM_getValue(WINS_CACHE_KEY)) {
-    var tempWinsCache = JSON.parse(GM_getValue(WINS_CACHE_KEY));
-    if(Array.isArray(tempWinsCache)) { // convert old array into an object
-        for(var i = 0; i < tempWinsCache.length; i++) {
-            winsCache['a'+tempWinsCache[i].appid] = tempWinsCache[i].appid;
+if(JSON.parse(GM_getValue(USER_CACHE_VERSION_KEY, "[0,0,0]")) > [1,3,2]) { // Ignore caches from versions older than 1.3.3
+    if(GM_getValue(PLAYTIME_CACHE_KEY)) {
+        playtimeCache = JSON.parse(GM_getValue(PLAYTIME_CACHE_KEY));
+    }
+    if(GM_getValue(ACHIEVEMENT_CACHE_KEY)) {
+        achievementCache = JSON.parse(GM_getValue(ACHIEVEMENT_CACHE_KEY));
+    }
+    if(GM_getValue(WINS_CACHE_KEY)) {
+        var tempWinsCache = JSON.parse(GM_getValue(WINS_CACHE_KEY));
+        if(Array.isArray(tempWinsCache)) { // convert old array into an object
+            for(var i = 0; i < tempWinsCache.length; i++) {
+                winsCache['a'+tempWinsCache[i].appid] = tempWinsCache[i].appid;
+            }
+        } else {
+            winsCache = tempWinsCache;
         }
-    } else {
-        winsCache = tempWinsCache;
     }
 }
 if(GM_getValue(SUB_APPID_CACHE_KEY)) {
-    if(!GM_getValue(SUB_APPID_CACHE_DATE_KEY)) {
-        subAppIdsCache = {}; // ignore old caches
-    } else {
+    if(JSON.parse(GM_getValue(SUB_APPID_CACHE_VERSION_KEY, "[0,0,0]")) > [1,3,2]) { // Ignore caches from versions older than 1.3.3
         subAppIdsCache = JSON.parse(GM_getValue(SUB_APPID_CACHE_KEY));
     }
 }
@@ -86,6 +89,9 @@ var errorFn = function(response) {
 };
 
 var formatPercentage = function(x, per, precision) {
+    if(isNaN(x / per)) {
+        return "N/A";
+    }
     return Number(x / per * 100).toPrecision(precision) + "%";
 };
 
@@ -465,7 +471,7 @@ var cacheJSONValue = function(key, value) {
                         run_status = "ACHIEVEMENTS";
                         cacheJSONValue(WINS_CACHE_KEY, winsCache);
                         cacheJSONValue(SUB_APPID_CACHE_KEY, subAppIdsCache);
-                        GM_setValue(SUB_APPID_CACHE_DATE_KEY, new Date().getTime());
+                        GM_setValue(SUB_APPID_CACHE_VERSION_KEY, JSON.stringify(CURRENT_VERSION));
                         var i = 0;
                         $.each(winsCache, function(id, appid) {
                             activeRequests += 1;
@@ -478,6 +484,7 @@ var cacheJSONValue = function(key, value) {
                                 clearInterval(intervalId);
                                 run_status = "STOPPED";
                                 cacheJSONValue(ACHIEVEMENT_CACHE_KEY, achievementCache);
+                                GM_setValue(USER_CACHE_VERSION_KEY, JSON.stringify(CURRENT_VERSION));
                                 console.log("Errors during API queries:", errorCount);
                             } else {
                                 displayButtons();
