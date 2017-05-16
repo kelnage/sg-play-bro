@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.3.4
+// @version      1.3.5
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -17,7 +17,7 @@
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,3,4];
+var CURRENT_VERSION = [1,3,5];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
@@ -176,7 +176,7 @@ var enhanceWonGames = function() {
 
 var updateTableStats = function() {
     var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0,
-        playtime_total = 0, playtime_game_count = 0, win_count = 0;
+        achieved_game_count_25 = 0, playtime_total = 0, playtime_game_count = 0, win_count = 0;
     $.each(winsCache, function(aid, appid) {
         win_count += 1;
         var achievement_counts = achievementCache[aid];
@@ -185,6 +185,9 @@ var updateTableStats = function() {
             if(achievement_counts.achieved > 0) {
                 achievement_percentage_sum += achievement_counts.achieved / achievement_counts.total;
                 achieved_game_count += 1;
+                if(achievement_counts.achieved > (achievement_counts.total / 4)) {
+                    achieved_game_count_25 += 1;
+                }
             }
         }
         if(playtimeCache[aid]) {
@@ -203,8 +206,13 @@ var updateTableStats = function() {
         $average_playtime.text(formatMinutes(playtime_total / win_count) + " in all wins");
     }
     $total_playtime.text(formatMinutes(playtime_total));
-    $game_counts.text(formatPercentage(playtime_game_count, win_count, 3) + " (" + playtime_game_count + '/' + win_count + ') with playtime, ' +
-                      formatPercentage(achieved_game_count, achievement_game_count, 3) + " (" + achieved_game_count + '/' + achievement_game_count + ') with ≥1 achievement');
+    $game_counts.empty();
+    $game_counts.append('playtime: ');
+    $game_counts.append($('<span></span>').attr('title', playtime_game_count + '/' + win_count).text(formatPercentage(playtime_game_count, win_count, 3)));
+    $game_counts.append(', ≥1 achievement: ');
+    $game_counts.append($('<span></span>').attr('title', achieved_game_count + '/' + achievement_game_count).text(formatPercentage(achieved_game_count, achievement_game_count, 3)));
+    $game_counts.append(', ≥25% achievement: ');
+    $game_counts.append($('<span></span>').attr('title', achieved_game_count_25 + '/' + achievement_game_count).text(formatPercentage(achieved_game_count_25, achievement_game_count, 3)));
 };
 
 var updateDisplayedCacheDate = function(t) {
@@ -426,9 +434,9 @@ var cacheJSONValue = function(key, value) {
     $left_row_1.append($average_playtime);
     $left_row_2.append('<div class="featured__table__row__left">Total Playtime</div>');
     $left_row_2.append($total_playtime);
-    $right_row_1.append('<div class="featured__table__row__left">Average Achievement Percentage</div>');
+    $right_row_1.append('<div class="featured__table__row__left">Avg. Achievement Percentage</div>');
     $right_row_1.append($percentage);
-    $right_row_2.append('<div class="featured__table__row__left">Win Counts</div>');
+    $right_row_2.append('<div class="featured__table__row__left">Wins with...</div>');
     $right_row_2.append($game_counts);
     $featured_table_col1.append($left_row_1);
     $featured_table_col1.append($left_row_2);
