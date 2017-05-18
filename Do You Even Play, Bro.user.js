@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.3.6
+// @version      1.3.7
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -17,7 +17,7 @@
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,3,6];
+var CURRENT_VERSION = [1,3,7];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
@@ -177,8 +177,9 @@ var enhanceWonGames = function() {
 };
 
 var updateTableStats = function() {
-    var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0, achieved_game_count_25 = 0,
-        playtime_total = 0, playtime_game_count = 0, playtime_game_count_2h = 0,
+    var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0,
+        achieved_game_count_25 = 0, achieved_game_count_100 = 0,
+        playtime_total = 0, playtime_game_count = 0, playtime_game_count_2h = 0, playtime_game_count_10h = 0,
         win_count = 0, achievement_playtime_total = 0, achievement_playtime_count = 0;
     $.each(winsCache, function(aid, appid) {
         win_count += 1;
@@ -191,6 +192,9 @@ var updateTableStats = function() {
                 if(achievement_counts.achieved >= (achievement_counts.total / 4)) {
                     achieved_game_count_25 += 1;
                 }
+                if(achievement_counts.achieved === achievement_counts.total) {
+                    achieved_game_count_100 += 1;
+                }
             }
         }
         if(playtimeCache[aid]) {
@@ -198,6 +202,9 @@ var updateTableStats = function() {
             playtime_game_count += 1;
             if(playtimeCache[aid] >= 120) {
                 playtime_game_count_2h += 1;
+            }
+            if(playtimeCache[aid] >= 600) {
+                playtime_game_count_10h += 1;
             }
         }
         if(achievement_counts && achievement_counts.total > 0 && playtimeCache[aid]) {
@@ -217,13 +224,17 @@ var updateTableStats = function() {
     }
     $total_playtime.text(formatMinutes(playtime_total));
     $playtime_counts.text('any playtime: ' + formatPercentage(playtime_game_count, win_count, 3) +
-                          ' (' + playtime_game_count + '/' + win_count + '), ≥2 hours playtime: ' +
+                          ' (' + playtime_game_count + '/' + win_count + '), ≥2 hours: ' +
                           formatPercentage(playtime_game_count_2h, win_count, 3) +
-                          ' (' + playtime_game_count_2h + '/' + win_count + ')');
-    $achievement_counts.text('≥1 achievement: ' + formatPercentage(achieved_game_count, achievement_game_count, 3) +
-                             ' (' + achieved_game_count + '/' + achievement_game_count + '), ≥25% achievement: ' +
+                          ' (' + playtime_game_count_2h + '/' + win_count + '), ≥10 hours: '+
+                          formatPercentage(playtime_game_count_10h, win_count, 3) +
+                          ' (' + playtime_game_count_10h + '/' + win_count + ')');
+    $achievement_counts.text('≥1: ' + formatPercentage(achieved_game_count, achievement_game_count, 3) +
+                             ' (' + achieved_game_count + '/' + achievement_game_count + '), ≥25%: ' +
                             formatPercentage(achieved_game_count_25, achievement_game_count, 3) +
-                             ' (' + achieved_game_count_25 + '/' + achievement_game_count + ')');
+                             ' (' + achieved_game_count_25 + '/' + achievement_game_count + '), 100%: ' +
+                            formatPercentage(achieved_game_count_100, achievement_game_count, 3) +
+                             ' (' + achieved_game_count_100 + '/' + achievement_game_count + ')');
     if(achievement_playtime_count > 0) {
         $average_achievement_playtime.text(formatMinutes(achievement_playtime_total / achievement_playtime_count) +
                                            ' (played ' + formatMinutes(achievement_playtime_total) + ' to get ' + achievement_playtime_count + ' achievements)');
