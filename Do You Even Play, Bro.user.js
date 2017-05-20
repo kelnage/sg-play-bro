@@ -220,18 +220,18 @@ var updateTableStats = function() {
     } else {
         $percentage.text("N/A");
     }
-    if(playtime_game_count !== win_count) {
-        $average_playtime.text(formatMinutes(playtime_total / win_count) + " per win, " + formatMinutes(playtime_total / playtime_game_count) + " per played win");
+    if(playtime_game_count !== reports_playtime_game_count) {
+        $average_playtime.text(formatMinutes(playtime_total / reports_playtime_game_count) + " per win, " + formatMinutes(playtime_total / playtime_game_count) + " per played win");
     } else {
-        $average_playtime.text(formatMinutes(playtime_total / win_count) + " in all wins");
+        $average_playtime.text(formatMinutes(playtime_total / reports_playtime_game_count) + " in all wins");
     }
     $total_playtime.text(formatMinutes(playtime_total));
-    $playtime_counts.text('any playtime: ' + formatPercentage(playtime_game_count, win_count, 3) +
-                          ' (' + playtime_game_count + '/' + win_count + '), ≥2 hours: ' +
-                          formatPercentage(playtime_game_count_2h, win_count, 3) +
-                          ' (' + playtime_game_count_2h + '/' + win_count + '), ≥10 hours: '+
-                          formatPercentage(playtime_game_count_10h, win_count, 3) +
-                          ' (' + playtime_game_count_10h + '/' + win_count + ')');
+    $playtime_counts.text('any playtime: ' + formatPercentage(playtime_game_count, reports_playtime_game_count, 3) +
+                          ' (' + playtime_game_count + '/' + reports_playtime_game_count + '), ≥2 hours: ' +
+                          formatPercentage(playtime_game_count_2h, reports_playtime_game_count, 3) +
+                          ' (' + playtime_game_count_2h + '/' + reports_playtime_game_count + '), ≥10 hours: '+
+                          formatPercentage(playtime_game_count_10h, reports_playtime_game_count, 3) +
+                          ' (' + playtime_game_count_10h + '/' + reports_playtime_game_count + ')');
     $achievement_counts.text('≥1: ' + formatPercentage(achieved_game_count, achievement_game_count, 3) +
                              ' (' + achieved_game_count + '/' + achievement_game_count + '), ≥25%: ' +
                             formatPercentage(achieved_game_count_25, achievement_game_count, 3) +
