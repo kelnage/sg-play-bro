@@ -179,7 +179,7 @@ var enhanceWonGames = function() {
 var updateTableStats = function() {
     var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0,
         achieved_game_count_25 = 0, achieved_game_count_100 = 0,
-        playtime_total = 0, playtime_game_count = 0, playtime_game_count_2h = 0, playtime_game_count_10h = 0,
+        playtime_total = 0, playtime_game_count = 0, playtime_game_count_2h = 0, playtime_game_count_10h = 0, reports_playtime_game_count = 0,
         win_count = 0, achievement_playtime_total = 0, achievement_playtime_count = 0;
     $.each(winsCache, function(aid, appid) {
         win_count += 1;
@@ -197,14 +197,17 @@ var updateTableStats = function() {
                 }
             }
         }
-        if(playtimeCache[aid]) {
-            playtime_total += playtimeCache[aid];
-            playtime_game_count += 1;
-            if(playtimeCache[aid] >= 120) {
-                playtime_game_count_2h += 1;
-            }
-            if(playtimeCache[aid] >= 600) {
-                playtime_game_count_10h += 1;
+        if (playtimeCache[aid] !== undefined) {
+            reports_playtime_game_count += 1
+            if(playtimeCache[aid]) {
+                playtime_total += playtimeCache[aid];
+                playtime_game_count += 1;
+                if(playtimeCache[aid] >= 120) {
+                    playtime_game_count_2h += 1;
+                }
+                if(playtimeCache[aid] >= 600) {
+                    playtime_game_count_10h += 1;
+                }
             }
         }
         if(achievement_counts && achievement_counts.total > 0 && playtimeCache[aid]) {
