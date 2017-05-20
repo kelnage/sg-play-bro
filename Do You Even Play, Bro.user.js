@@ -13,7 +13,6 @@
 // @connect      api.steampowered.com
 // @connect      store.steampowered.com
 // @require      https://code.jquery.com/jquery-1.12.4.min.js
-// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery-sparklines/2.1.2/jquery.sparkline.js
 // @updateURL    https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.meta.js
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
