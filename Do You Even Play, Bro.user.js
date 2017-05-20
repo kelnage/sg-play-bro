@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.3.7
+// @version      1.3.8
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -13,11 +13,12 @@
 // @connect      api.steampowered.com
 // @connect      store.steampowered.com
 // @require      https://code.jquery.com/jquery-1.12.4.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery-sparklines/2.1.2/jquery.sparkline.js
 // @updateURL    https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.meta.js
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,3,7];
+var CURRENT_VERSION = [1,3,8];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
@@ -38,11 +39,11 @@ var PLAYTIME_CACHE_KEY = "DYEPB_PLAYTIME_CACHE_" + encodeURIComponent(username),
     SUB_APPID_CACHE_VERSION_KEY = "DYEPB_SUB_APPID_CACHE_VERSION";
 
 var $percentage = $('<div class="featured__table__row__right"></div>'),
-    $average_playtime = $('<div class="featured__table__row__right"></div>'),
-    $total_playtime = $('<div class="featured__table__row__right"></div>'),
-    $average_achievement_playtime = $('<div class="featured__table__row__right"></div>'),
-    $playtime_counts = $('<div class="featured__table__row__right"></div>'),
-    $achievement_counts = $('<div class="featured__table__row__right"></div>'),
+    $average_total_playtime = $('<div class="featured__table__row__right"></div>'),
+    $playtime_any_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
+    $playtime_5_10_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
+    $achievement_any_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
+    $achievement_25_100_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $last_updated = $('<span title="" style="color: rgba(255,255,255,0.4)"></span>'),
     $progress_text = $('<span style="margin-left: 0.3em"></span>'),
     $rm_key_link = $('<a style="margin-left: 0.5em;color: rgba(255,255,255,0.6)" href="#">Delete cached API key</a>'),
@@ -179,10 +180,9 @@ var enhanceWonGames = function() {
 var updateTableStats = function() {
     var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0,
         achieved_game_count_25 = 0, achieved_game_count_100 = 0,
-        playtime_total = 0, playtime_game_count = 0, playtime_game_count_2h = 0, playtime_game_count_10h = 0, reports_playtime_game_count = 0,
+        playtime_total = 0, playtime_game_count = 0, playtime_game_count_5h = 0, playtime_game_count_10h = 0,
         win_count = 0, achievement_playtime_total = 0, achievement_playtime_count = 0;
     $.each(winsCache, function(aid, appid) {
-        win_count += 1;
         var achievement_counts = achievementCache[aid];
         if(achievement_counts && achievement_counts.total > 0) {
             achievement_game_count += 1;
@@ -197,17 +197,17 @@ var updateTableStats = function() {
                 }
             }
         }
-        if (playtimeCache[aid] !== undefined) {
-            reports_playtime_game_count += 1
-            if(playtimeCache[aid]) {
-                playtime_total += playtimeCache[aid];
+        if(playtimeCache[aid] !== undefined) {
+            win_count += 1;
+            playtime_total += playtimeCache[aid];
+            if(playtimeCache[aid] > 0) {
                 playtime_game_count += 1;
-                if(playtimeCache[aid] >= 120) {
-                    playtime_game_count_2h += 1;
-                }
-                if(playtimeCache[aid] >= 600) {
-                    playtime_game_count_10h += 1;
-                }
+            }
+            if(playtimeCache[aid] >= 300) {
+                playtime_game_count_5h += 1;
+            }
+            if(playtimeCache[aid] >= 600) {
+                playtime_game_count_10h += 1;
             }
         }
         if(achievement_counts && achievement_counts.total > 0 && playtimeCache[aid]) {
@@ -220,30 +220,26 @@ var updateTableStats = function() {
     } else {
         $percentage.text("N/A");
     }
-    if(playtime_game_count !== reports_playtime_game_count) {
-        $average_playtime.text(formatMinutes(playtime_total / reports_playtime_game_count) + " per win, " + formatMinutes(playtime_total / playtime_game_count) + " per played win");
+    if(playtime_game_count !== win_count) {
+        $average_total_playtime.text(formatMinutes(playtime_total / win_count) + ' per win, ' +
+                                     formatMinutes(playtime_total / playtime_game_count) + ' per played win, ' +
+                                     formatMinutes(playtime_total) + ' total');
     } else {
-        $average_playtime.text(formatMinutes(playtime_total / reports_playtime_game_count) + " in all wins");
+        $average_total_playtime.text(formatMinutes(playtime_total / win_count) + ' in all wins, ' +
+                                     formatMinutes(playtime_total) + ' total');
     }
-    $total_playtime.text(formatMinutes(playtime_total));
-    $playtime_counts.text('any playtime: ' + formatPercentage(playtime_game_count, reports_playtime_game_count, 3) +
-                          ' (' + playtime_game_count + '/' + reports_playtime_game_count + '), ≥2 hours: ' +
-                          formatPercentage(playtime_game_count_2h, reports_playtime_game_count, 3) +
-                          ' (' + playtime_game_count_2h + '/' + reports_playtime_game_count + '), ≥10 hours: '+
-                          formatPercentage(playtime_game_count_10h, reports_playtime_game_count, 3) +
-                          ' (' + playtime_game_count_10h + '/' + reports_playtime_game_count + ')');
-    $achievement_counts.text('≥1: ' + formatPercentage(achieved_game_count, achievement_game_count, 3) +
-                             ' (' + achieved_game_count + '/' + achievement_game_count + '), ≥25%: ' +
-                            formatPercentage(achieved_game_count_25, achievement_game_count, 3) +
-                             ' (' + achieved_game_count_25 + '/' + achievement_game_count + '), 100%: ' +
-                            formatPercentage(achieved_game_count_100, achievement_game_count, 3) +
-                             ' (' + achieved_game_count_100 + '/' + achievement_game_count + ')');
-    if(achievement_playtime_count > 0) {
-        $average_achievement_playtime.text(formatMinutes(achievement_playtime_total / achievement_playtime_count) +
-                                           ' (played ' + formatMinutes(achievement_playtime_total) + ' to get ' + achievement_playtime_count + ' achievements)');
-    } else {
-        $average_achievement_playtime.text("N/A");
-    }
+    $playtime_any_counts.text(formatPercentage(playtime_game_count, win_count, 3) +
+                              ' (' + playtime_game_count + '/' + win_count + ')');
+    $playtime_5_10_counts.text('≥5 hours: ' + formatPercentage(playtime_game_count_5h, win_count, 3) +
+                               ' (' + playtime_game_count_5h + '/' + win_count +
+                               '), ≥10 hours: ' + formatPercentage(playtime_game_count_10h, win_count, 3) +
+                               ' (' + playtime_game_count_10h + '/' + win_count + ')');
+    $achievement_any_counts.text(formatPercentage(achieved_game_count, achievement_game_count, 3) +
+                                 ' (' + achieved_game_count + '/' + achievement_game_count + ')');
+    $achievement_25_100_counts.text('≥25% complete: ' + formatPercentage(achieved_game_count_25, achievement_game_count, 3) +
+                                    ' (' + achieved_game_count_25 + '/' + achievement_game_count +
+                                    '), completed: ' + formatPercentage(achieved_game_count_100, achievement_game_count, 3) +
+                                    ' (' + achieved_game_count_100 + '/' + achievement_game_count + ')');
 };
 
 var updateDisplayedCacheDate = function(t) {
@@ -390,6 +386,7 @@ var fetchGamePlaytimes = function(steamID64, callback) {
             }
             if(data) {
                 var games = data.response.games;
+                console.log(games);
                 if(games) {
                     for(var i = 0; i < games.length; i++) {
                         playtimeCache["a"+games[i].appid] = games[i].playtime_forever;
@@ -453,9 +450,13 @@ var cacheJSONValue = function(key, value) {
     var $left_row_1 = $('<div class="featured__table__row"></div>'),
         $left_row_2 = $('<div class="featured__table__row"></div>'),
         $left_row_3 = $('<div class="featured__table__row"></div>'),
+        $left_row_4 = $('<div class="featured__table__row"></div>'),
+        $left_row_5 = $('<div class="featured__table__row"></div>'),
         $right_row_1 = $('<div class="featured__table__row"></div>'),
         $right_row_2 = $('<div class="featured__table__row"></div>'),
-        $right_row_3 = $('<div class="featured__table__row"></div>');
+        $right_row_3 = $('<div class="featured__table__row"></div>'),
+        $right_row_4 = $('<div class="featured__table__row"></div>'),
+        $right_row_5 = $('<div class="featured__table__row"></div>');
     $toolbar.append($button_container);
     $button_container.append($key_button);
     $button_container.append($fetch_button);
@@ -463,24 +464,20 @@ var cacheJSONValue = function(key, value) {
     $progress_container.append($progress_text);
     $toolbar.append($last_updated);
     $toolbar.append($rm_key_link);
-    $left_row_1.append('<div class="featured__table__row__left">Average Playtime</div>');
-    $left_row_1.append($average_playtime);
-    $left_row_2.append('<div class="featured__table__row__left">Total Playtime</div>');
-    $left_row_2.append($total_playtime);
-    $left_row_3.append('<div class="featured__table__row__left">Games with playtime</div>');
-    $left_row_3.append($playtime_counts);
+    $left_row_1.append('<div class="featured__table__row__left">Average and Total Playtime</div>');
+    $left_row_1.append($average_total_playtime);
+    $left_row_2.append('<div class="featured__table__row__left">Games with any Playtime</div>');
+    $left_row_2.append($playtime_any_counts);
+    $left_row_3.append('<div class="featured__table__row__left">Games with Playtime...</div>');
+    $left_row_3.append($playtime_5_10_counts);
     $right_row_1.append('<div class="featured__table__row__left">Avg. Achievement Percentage</div>');
     $right_row_1.append($percentage);
-    $right_row_2.append('<div class="featured__table__row__left">Avg. Achievement Playtime</div>');
-    $right_row_2.append($average_achievement_playtime);
-    $right_row_3.append('<div class="featured__table__row__left">Games with achievements</div>');
-    $right_row_3.append($achievement_counts);
-    $featured_table_col1.append($left_row_1);
-    $featured_table_col1.append($left_row_2);
-    $featured_table_col1.append($left_row_3);
-    $featured_table_col2.append($right_row_1);
-    $featured_table_col2.append($right_row_2);
-    $featured_table_col2.append($right_row_3);
+    $right_row_2.append('<div class="featured__table__row__left">Games with ≥1 Achievement</div>');
+    $right_row_2.append($achievement_any_counts);
+    $right_row_3.append('<div class="featured__table__row__left">Games with Achievements...</div>');
+    $right_row_3.append($achievement_25_100_counts);
+    $featured_table_col1.append($left_row_1).append($left_row_2).append($left_row_3);
+    $featured_table_col2.append($right_row_1).append($right_row_2).append($right_row_3);
     $featured_table.after($toolbar);
 
     updatePage(GM_getValue(LAST_CACHE_KEY) ? new Date(GM_getValue(LAST_CACHE_KEY)) : null);
