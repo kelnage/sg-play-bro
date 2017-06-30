@@ -42,7 +42,10 @@ var $percentage = $('<div class="featured__table__row__right"></div>'),
     $playtime_any_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $playtime_5_10_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $achievement_any_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
-    $achievement_25_100_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
+    $achievement_25_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
+    $achievement_50_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
+    $achievement_75_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
+    $achievement_100_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $last_updated = $('<span title="" style="color: rgba(255,255,255,0.4)"></span>'),
     $progress_text = $('<span style="margin-left: 0.3em"></span>'),
     $rm_key_link = $('<a style="margin-left: 0.5em;color: rgba(255,255,255,0.6)" href="#">Delete cached API key</a>'),
@@ -178,7 +181,7 @@ var enhanceWonGames = function() {
 
 var updateTableStats = function() {
     var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0,
-        achieved_game_count_25 = 0, achieved_game_count_100 = 0,
+        achieved_game_count_25 = 0, achieved_game_count_50 = 0, achieved_game_count_75 = 0, achieved_game_count_100 = 0,
         playtime_total = 0, playtime_game_count = 0, playtime_game_count_5h = 0, playtime_game_count_10h = 0,
         win_count = 0, achievement_playtime_total = 0, achievement_playtime_count = 0;
     $.each(winsCache, function(aid, appid) {
@@ -190,6 +193,12 @@ var updateTableStats = function() {
                 achieved_game_count += 1;
                 if(achievement_counts.achieved >= (achievement_counts.total / 4)) {
                     achieved_game_count_25 += 1;
+                }
+                if(achievement_counts.achieved >= (achievement_counts.total / 2)) {
+                    achieved_game_count_50 += 1;
+                }
+                if(achievement_counts.achieved >= ((achievement_counts.total / 4) + (achievement_counts.total / 2))) {
+                    achieved_game_count_75 += 1;
                 }
                 if(achievement_counts.achieved === achievement_counts.total) {
                     achieved_game_count_100 += 1;
@@ -235,9 +244,13 @@ var updateTableStats = function() {
                                ' (' + playtime_game_count_10h + '/' + win_count + ')');
     $achievement_any_counts.text(formatPercentage(achieved_game_count, achievement_game_count, 3) +
                                  ' (' + achieved_game_count + '/' + achievement_game_count + ')');
-    $achievement_25_100_counts.text('≥25% complete: ' + formatPercentage(achieved_game_count_25, achievement_game_count, 3) +
-                                    ' (' + achieved_game_count_25 + '/' + achievement_game_count +
-                                    '), completed: ' + formatPercentage(achieved_game_count_100, achievement_game_count, 3) +
+    $achievement_25_counts.text(formatPercentage(achieved_game_count_25, achievement_game_count, 3) +
+                                    ' (' + achieved_game_count_25 + '/' + achievement_game_count + ')');
+    $achievement_50_counts.text(formatPercentage(achieved_game_count_50, achievement_game_count, 3) +
+                                    ' (' + achieved_game_count_50 + '/' + achievement_game_count + ')');
+    $achievement_75_counts.text(formatPercentage(achieved_game_count_75, achievement_game_count, 3) +
+                                    ' (' + achieved_game_count_75 + '/' + achievement_game_count + ')');
+    $achievement_100_counts.text(formatPercentage(achieved_game_count_100, achievement_game_count, 3) +
                                     ' (' + achieved_game_count_100 + '/' + achievement_game_count + ')');
 };
 
@@ -455,7 +468,8 @@ var cacheJSONValue = function(key, value) {
         $right_row_2 = $('<div class="featured__table__row"></div>'),
         $right_row_3 = $('<div class="featured__table__row"></div>'),
         $right_row_4 = $('<div class="featured__table__row"></div>'),
-        $right_row_5 = $('<div class="featured__table__row"></div>');
+        $right_row_5 = $('<div class="featured__table__row"></div>'),
+        $right_row_6 = $('<div class="featured__table__row"></div>');
     $toolbar.append($button_container);
     $button_container.append($key_button);
     $button_container.append($fetch_button);
@@ -469,14 +483,20 @@ var cacheJSONValue = function(key, value) {
     $left_row_2.append($playtime_any_counts);
     $left_row_3.append('<div class="featured__table__row__left">Games with Playtime...</div>');
     $left_row_3.append($playtime_5_10_counts);
+    $left_row_4.append('<div class="featured__table__row__left">Games ≥25% Complete:</div>');
+    $left_row_4.append($achievement_25_counts);
+    $left_row_5.append('<div class="featured__table__row__left">Cames ≥75% Complete:</div>');
+    $left_row_5.append($achievement_75_counts);
     $right_row_1.append('<div class="featured__table__row__left">Avg. Achievement Percentage</div>');
     $right_row_1.append($percentage);
-    $right_row_2.append('<div class="featured__table__row__left">Games with ≥1 Achievement</div>');
+    $right_row_2.append('<div class="featured__table__row__left">Games with any Achievements:</div>');
     $right_row_2.append($achievement_any_counts);
-    $right_row_3.append('<div class="featured__table__row__left">Games with Achievements...</div>');
-    $right_row_3.append($achievement_25_100_counts);
-    $featured_table_col1.append($left_row_1).append($left_row_2).append($left_row_3);
-    $featured_table_col2.append($right_row_1).append($right_row_2).append($right_row_3);
+    $right_row_3.append('<div class="featured__table__row__left">Games ≥50% Complete:</div>');
+    $right_row_3.append($achievement_50_counts);
+    $right_row_4.append('<div class="featured__table__row__left">Games 100% Complete:</div>');
+    $right_row_4.append($achievement_100_counts);
+    $featured_table_col1.append($left_row_1).append($left_row_2).append($left_row_3).append($left_row_4).append($left_row_5);
+    $featured_table_col2.append($right_row_1).append($right_row_2).append($right_row_3).append($right_row_4);
     $featured_table.after($toolbar);
 
     updatePage(GM_getValue(LAST_CACHE_KEY) ? new Date(GM_getValue(LAST_CACHE_KEY)) : null);
