@@ -178,7 +178,7 @@ var enhanceWonGames = function() {
 
 var updateTableStats = function() {
     var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0,
-        achieved_game_count_25 = 0, achieved_game_count_100 = 0,
+        achieved_game_count_25 = 0, achieved_game_count_50 = 0, achieved_game_count_75 = 0, achieved_game_count_100 = 0,
         playtime_total = 0, playtime_game_count = 0, playtime_game_count_5h = 0, playtime_game_count_10h = 0,
         win_count = 0, achievement_playtime_total = 0, achievement_playtime_count = 0;
     $.each(winsCache, function(aid, appid) {
@@ -190,6 +190,12 @@ var updateTableStats = function() {
                 achieved_game_count += 1;
                 if(achievement_counts.achieved >= (achievement_counts.total / 4)) {
                     achieved_game_count_25 += 1;
+                }
+                if(achievement_counts.achieved >= (achievement_counts.total / 2)) {
+                    achieved_game_count_50 += 1;
+                }
+                if(achievement_counts.achieved >= ((achievement_counts.total / 4) + (achievement_counts.total / 2))) {
+                    achieved_game_count_75 += 1;
                 }
                 if(achievement_counts.achieved === achievement_counts.total) {
                     achieved_game_count_100 += 1;
@@ -237,6 +243,10 @@ var updateTableStats = function() {
                                  ' (' + achieved_game_count + '/' + achievement_game_count + ')');
     $achievement_25_100_counts.text('≥25% complete: ' + formatPercentage(achieved_game_count_25, achievement_game_count, 3) +
                                     ' (' + achieved_game_count_25 + '/' + achievement_game_count +
+                                    '),≥50% complete: ' + formatPercentage(achieved_game_count_50, achievement_game_count, 3) +
+                                    ' (' + achieved_game_count_50 + '/' + achievement_game_count +
+                                    '),≥75% complete: ' + formatPercentage(achieved_game_count_75, achievement_game_count, 3) +
+                                    ' (' + achieved_game_count_75 + '/' + achievement_game_count +
                                     '), completed: ' + formatPercentage(achieved_game_count_100, achievement_game_count, 3) +
                                     ' (' + achieved_game_count_100 + '/' + achievement_game_count + ')');
 };
