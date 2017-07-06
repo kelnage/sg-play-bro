@@ -455,7 +455,8 @@ var cacheJSONValue = function(key, value) {
 (function() {
     'use strict';
 
-    var $featured_table = $(".featured__table"),
+    var $featured_wrap = $(".featured__outer-wrap"),
+        $featured_table = $(".featured__table"),
         $featured_table_col1 = $featured_table.children(":first-child"),
         $featured_table_col2 = $featured_table.children(":last-child");
 
@@ -477,6 +478,7 @@ var cacheJSONValue = function(key, value) {
     $progress_container.append($progress_text);
     $toolbar.append($last_updated);
     $toolbar.append($rm_key_link);
+    $featured_wrap.css('background-size','auto 100%');
     $left_row_1.append('<div class="featured__table__row__left">Average and Total Playtime</div>');
     $left_row_1.append($average_total_playtime);
     $left_row_2.append('<div class="featured__table__row__left">Games with any Playtime</div>');
