@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.3.8
+// @version      1.4.0
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -12,12 +12,13 @@
 // @connect      self
 // @connect      api.steampowered.com
 // @connect      store.steampowered.com
-// @require      https://code.jquery.com/jquery-1.12.4.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/1.10.0/jquery.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jquery-sparklines/2.1.2/jquery.sparkline.js
 // @updateURL    https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.meta.js
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,3,8];
+var CURRENT_VERSION = [1,4,0];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
@@ -35,13 +36,15 @@ var PLAYTIME_CACHE_KEY = "DYEPB_PLAYTIME_CACHE_" + encodeURIComponent(username),
     LAST_CACHE_KEY = "DYEPB_LAST_CACHED_" + encodeURIComponent(username),
     USER_CACHE_VERSION_KEY = "DYEPB_USER_CACHE_VERSION_" + encodeURIComponent(username),
     SUB_APPID_CACHE_KEY = "DYEPB_SUB_APPID_CACHE",
-    SUB_APPID_CACHE_VERSION_KEY = "DYEPB_SUB_APPID_CACHE_VERSION";
+    SUB_APPID_CACHE_VERSION_KEY = "DYEPB_SUB_APPID_CACHE_VERSION",
+    CHART_TEXT_PREFERENCE = "DYEPB_CHART_TEXT";
 
 var $percentage = $('<div class="featured__table__row__right"></div>'),
     $average_total_playtime = $('<div class="featured__table__row__right"></div>'),
     $playtime_any_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $playtime_5_10_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $achievement_any_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
+    $achievement_counts_chart = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $achievement_25_100_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $last_updated = $('<span title="" style="color: rgba(255,255,255,0.4)"></span>'),
     $progress_text = $('<span style="margin-left: 0.3em"></span>'),
@@ -50,7 +53,8 @@ var $percentage = $('<div class="featured__table__row__right"></div>'),
     $fetch_button = $('<a class="nav__button" href="#">' + (GM_getValue(LAST_CACHE_KEY) ? 'Update Playing Info' : 'Fetch Playing Info' ) + '</a>'),
     $key_button = $('<a class="nav__button" href="#">Provide API Key</a>'),
     $button_container = $('<div class="nav__button-container"></div>'),
-    $progress_container = $('<div id="progress" style="margin: 0.5em 0"><img src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/0.16.1/images/loader-large.gif" height="10px" width="10px" /></div>');
+    $progress_container = $('<div id="progress" style="margin: 0.5em 0"><img src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/0.16.1/images/loader-large.gif" height="10px" width="10px" /></div>'),
+    $chart_text_switch = $('<a href="#" style="font-size: smaller">chart</a>');
 
 var playtimeCache = {},
     achievementCache = {},
@@ -88,6 +92,15 @@ var errorFn = function(response) {
     activeRequests -= 1;
     errorCount += 1;
     console.log("Error details: ", response.status, response.responseText);
+};
+
+var maxIndex = function(arr, val) {
+    var i = arr.length - 1;
+    while(i >= 0) {
+        if(arr[i] == val) { return i; }
+        i--;
+    }
+    return 0;
 };
 
 var formatPercentage = function(x, per, precision) {
@@ -178,15 +191,21 @@ var enhanceWonGames = function() {
 
 var updateTableStats = function() {
     var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0,
-        achieved_game_count_25 = 0, achieved_game_count_100 = 0,
+        achieved_game_count_25 = 0, achieved_game_count_100 = 0, achieved_game_cumulative = [],
         playtime_total = 0, playtime_game_count = 0, playtime_game_count_5h = 0, playtime_game_count_10h = 0,
         win_count = 0, achievement_playtime_total = 0, achievement_playtime_count = 0;
+    var i = 0;
+    while(i < 101) {
+        achieved_game_cumulative[i] = 0;
+        i++;
+    }
     $.each(winsCache, function(aid, appid) {
         var achievement_counts = achievementCache[aid];
         if(achievement_counts && achievement_counts.total > 0) {
             achievement_game_count += 1;
             if(achievement_counts.achieved > 0) {
-                achievement_percentage_sum += achievement_counts.achieved / achievement_counts.total;
+                var ratio = achievement_counts.achieved / achievement_counts.total;
+                achievement_percentage_sum += ratio;
                 achieved_game_count += 1;
                 if(achievement_counts.achieved >= (achievement_counts.total / 4)) {
                     achieved_game_count_25 += 1;
@@ -194,6 +213,11 @@ var updateTableStats = function() {
                 if(achievement_counts.achieved === achievement_counts.total) {
                     achieved_game_count_100 += 1;
                 }
+            }
+            var j = 0, percentage = Math.round(achievement_counts.achieved / achievement_counts.total * 100);
+            while(j <= percentage) {
+                achieved_game_cumulative[j] += 1;
+                j++;
             }
         }
         if(playtimeCache[aid] !== undefined) {
@@ -235,10 +259,21 @@ var updateTableStats = function() {
                                ' (' + playtime_game_count_10h + '/' + win_count + ')');
     $achievement_any_counts.text(formatPercentage(achieved_game_count, achievement_game_count, 3) +
                                  ' (' + achieved_game_count + '/' + achievement_game_count + ')');
-    $achievement_25_100_counts.text('≥25% complete: ' + formatPercentage(achieved_game_count_25, achievement_game_count, 3) +
-                                    ' (' + achieved_game_count_25 + '/' + achievement_game_count +
-                                    '), completed: ' + formatPercentage(achieved_game_count_100, achievement_game_count, 3) +
-                                    ' (' + achieved_game_count_100 + '/' + achievement_game_count + ')');
+    $achievement_counts_chart.sparkline(
+        achieved_game_cumulative,
+        {'type': 'line', 'lineColor': 'rgba(255, 255, 255, 0.6)', 'fillColor': 'rgba(255, 255, 255, 0.4)', 'chartRangeMin': 0,
+         'spotColor': 'rgb(153,204,102)', 'minSpotColor': 'rgb(153,204,102)', 'maxSpotColor': 'rgb(153,204,102)',
+        'tooltipFormatter': function(sparkline, options, fields) {
+            return maxIndex(achieved_game_cumulative, fields.y) +  '% complete: ' + formatPercentage(fields.y, achievement_game_count, 3) + ' (' + fields.y + '/' + achievement_game_count + ')';
+        }});
+    $achievement_counts_chart.css(
+        'background',
+        'linear-gradient(to right, transparent calc(25%), rgba(255,0,0,0.5) calc(25% + 2px), transparent calc(25% + 4px), transparent calc(50% - 2px), rgba(255,0,0,0.5) calc(50%), transparent calc(50% + 2px), transparent calc(75% - 3px), rgba(255,0,0,0.5) calc(75% - 1px), transparent calc(75% + 1px))');
+    $achievement_25_100_counts.text(
+        '≥25% complete: ' + formatPercentage(achieved_game_count_25, achievement_game_count, 3) +
+        ' (' + achieved_game_count_25 + '/' + achievement_game_count +
+        '), completed: ' + formatPercentage(achieved_game_count_100, achievement_game_count, 3) +
+        ' (' + achieved_game_count_100 + '/' + achievement_game_count + ')');
 };
 
 var updateDisplayedCacheDate = function(t) {
@@ -473,13 +508,42 @@ var cacheJSONValue = function(key, value) {
     $right_row_1.append($percentage);
     $right_row_2.append('<div class="featured__table__row__left">Games with ≥1 Achievement</div>');
     $right_row_2.append($achievement_any_counts);
-    $right_row_3.append('<div class="featured__table__row__left">Games with Achievements...</div>');
+    var $achievement_games = $('<div class="featured__table__row__left">Games with Achievements </div>');
+    $achievement_games.append($chart_text_switch);
+    $right_row_3.append($achievement_games);
     $right_row_3.append($achievement_25_100_counts);
+    $right_row_3.append($achievement_counts_chart);
+    if(GM_getValue(CHART_TEXT_PREFERENCE, "text") == "text") {
+        $achievement_counts_chart.hide();
+        $chart_text_switch.text('chart');
+    } else {
+        $achievement_25_100_counts.hide();
+        $chart_text_switch.text('text');
+    }
     $featured_table_col1.append($left_row_1).append($left_row_2).append($left_row_3);
     $featured_table_col2.append($right_row_1).append($right_row_2).append($right_row_3);
     $featured_table.after($toolbar);
 
     updatePage(GM_getValue(LAST_CACHE_KEY) ? new Date(GM_getValue(LAST_CACHE_KEY)) : null);
+
+    $chart_text_switch.click(function(e) {
+        e.preventDefault();
+        if(GM_getValue(CHART_TEXT_PREFERENCE, "text") == "text") {
+            // switch to chart
+            $achievement_counts_chart.show();
+            $achievement_25_100_counts.hide();
+            $.sparkline_display_visible();
+            GM_setValue(CHART_TEXT_PREFERENCE, "chart");
+            $chart_text_switch.text("text");
+        } else {
+            // switch to text
+            $achievement_counts_chart.hide();
+            $achievement_25_100_counts.show();
+            GM_setValue(CHART_TEXT_PREFERENCE, "text");
+            $chart_text_switch.text("chart");
+        }
+        updateTableStats();
+    });
 
     $key_button.click(function(e) {
         e.preventDefault();
