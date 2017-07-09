@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.4.0
+// @version      1.4.1
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -18,7 +18,7 @@
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,4,0];
+var CURRENT_VERSION = [1,4,1];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
@@ -130,7 +130,7 @@ var formatMinutes = function(mins) {
     }
 };
 
-var enhanceRow = function($heading, minutesPlayed, achievementCounts) {
+var enhanceRow = function($heading, minutesPlayed, achievementCounts, appid) {
     var $playtimeSpan = $heading.find(".dyegb_playtime"), $achievementSpan = $heading.find(".dyegb_achievement");
     if(minutesPlayed) {
         if($playtimeSpan.length > 0) {
@@ -141,7 +141,8 @@ var enhanceRow = function($heading, minutesPlayed, achievementCounts) {
     }
     if(achievementCounts && achievementCounts.total > 0) {
         if($achievementSpan.length === 0) {
-            $achievementSpan = $('<span class="dyegb_achievement giveaway__heading__thin">' + formatPercentage(achievementCounts.achieved, achievementCounts.total, 3) + '</span>');
+            $achievementSpan = $('<a href="https://steamcommunity.com/profiles/'+userID64+'/stats/'+appid+'/?tab=achievements" target="_new" class="dyegb_achievement giveaway__heading__thin">' +
+                                 formatPercentage(achievementCounts.achieved, achievementCounts.total, 3) + '</a>');
             $heading.append($achievementSpan);
         }
         if(achievementCounts.achieved === 0) {
@@ -167,7 +168,7 @@ var enhanceWonGames = function() {
         if($ga_icon && $ga_icon.attr("href")) {
             var id = $ga_icon.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
             if(id[1] == "sub" || id[1] == "subs") {
-                var totalMinutes = 0, totalAchievements = {achieved: 0, total: 0};
+                var totalMinutes = 0, totalAchievements = {achieved: 0, total: 0}, bestAppid = null, topCompletion = null;
                 if(subAppIdsCache['s'+id[2]]) {
                     var appids = subAppIdsCache['s'+id[2]];
                     for(var i = 0; i < appids.length; i++) {
@@ -177,13 +178,17 @@ var enhanceWonGames = function() {
                         if(achievementCache['a'+appids[i]]) {
                             totalAchievements.achieved += achievementCache['a'+appids[i]].achieved;
                             totalAchievements.total += achievementCache['a'+appids[i]].total;
+                            if(topCompletion === null || achievementCache['a'+appids[i]].achieved / achievementCache['a'+appids[i]].total > topCompletion) {
+                                topCompletion = achievementCache['a'+appids[i]].achieved / achievementCache['a'+appids[i]].total;
+                                bestAppid = appids[i];
+                            }
                         }
                     }
                 }
-                enhanceRow($heading, totalMinutes, totalAchievements);
+                enhanceRow($heading, totalMinutes, totalAchievements, bestAppid);
             }
             if(id[1] == "app" || id[1] == "apps") {
-                enhanceRow($heading, playtimeCache['a'+id[2]], achievementCache['a'+id[2]]);
+                enhanceRow($heading, playtimeCache['a'+id[2]], achievementCache['a'+id[2]], id[2]);
             }
         }
     });
@@ -262,7 +267,7 @@ var updateTableStats = function() {
     $achievement_counts_chart.sparkline(
         achieved_game_cumulative,
         {'type': 'line', 'lineColor': 'rgba(255, 255, 255, 0.6)', 'fillColor': 'rgba(255, 255, 255, 0.4)', 'chartRangeMin': 0,
-         'spotColor': 'rgb(153,204,102)', 'minSpotColor': 'rgb(153,204,102)', 'maxSpotColor': 'rgb(153,204,102)',
+         'spotColor': 'rgb(153,204,102)', 'minSpotColor': 'rgb(153,204,102)', 'maxSpotColor': 'rgb(153,204,102)', 'tooltipOffsetX': -60, 'tooltipOffsetY': 25,
         'tooltipFormatter': function(sparkline, options, fields) {
             return maxIndex(achieved_game_cumulative, fields.y) +  '% complete: ' + formatPercentage(fields.y, achievement_game_count, 3) + ' (' + fields.y + '/' + achievement_game_count + ')';
         }});
