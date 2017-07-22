@@ -266,7 +266,7 @@ var updateTableStats = function() {
                                  ' (' + achieved_game_count + '/' + achievement_game_count + ')');
     $achievement_counts_chart.sparkline(
         achieved_game_cumulative,
-        {'type': 'line', 'lineColor': 'rgba(255, 255, 255, 0.6)', 'fillColor': 'rgba(255, 255, 255, 0.4)', 'chartRangeMin': 0,
+        {'type': 'line', 'lineColor': 'rgba(255, 255, 255, 0.6)', 'fillColor': 'rgba(255, 255, 255, 0.4)', 'chartRangeMin': 0, 'height': 18,
          'spotColor': 'rgb(153,204,102)', 'minSpotColor': 'rgb(153,204,102)', 'maxSpotColor': 'rgb(153,204,102)', 'tooltipOffsetX': -60, 'tooltipOffsetY': 25,
         'tooltipFormatter': function(sparkline, options, fields) {
             return maxIndex(achieved_game_cumulative, fields.y) +  '% complete: ' + formatPercentage(fields.y, achievement_game_count, 3) + ' (' + fields.y + '/' + achievement_game_count + ')';
