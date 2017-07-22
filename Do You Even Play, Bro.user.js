@@ -266,7 +266,7 @@ var updateTableStats = function() {
                                  ' (' + achieved_game_count + '/' + achievement_game_count + ')');
     $achievement_counts_chart.sparkline(
         achieved_game_cumulative,
-        {'type': 'line', 'lineColor': 'rgba(255, 255, 255, 0.6)', 'fillColor': 'rgba(255, 255, 255, 0.4)', 'chartRangeMin': 0,
+        {'type': 'line', 'lineColor': 'rgba(255, 255, 255, 0.6)', 'fillColor': 'rgba(255, 255, 255, 0.4)', 'chartRangeMin': 0, 'height': 18,
          'spotColor': 'rgb(153,204,102)', 'minSpotColor': 'rgb(153,204,102)', 'maxSpotColor': 'rgb(153,204,102)', 'tooltipOffsetX': -60, 'tooltipOffsetY': 25,
         'tooltipFormatter': function(sparkline, options, fields) {
             return maxIndex(achieved_game_cumulative, fields.y) +  '% complete: ' + formatPercentage(fields.y, achievement_game_count, 3) + ' (' + fields.y + '/' + achievement_game_count + ')';
@@ -513,7 +513,7 @@ var cacheJSONValue = function(key, value) {
     $right_row_1.append($percentage);
     $right_row_2.append('<div class="featured__table__row__left">Games with ≥1 Achievement</div>');
     $right_row_2.append($achievement_any_counts);
-    var $achievement_games = $('<div class="featured__table__row__left">Games with Achievements </div>');
+    var $achievement_games = $('<div class="featured__table__row__left">Achievement Rates </div>');
     $achievement_games.append($chart_text_switch);
     $right_row_3.append($achievement_games);
     $right_row_3.append($achievement_25_100_counts);
