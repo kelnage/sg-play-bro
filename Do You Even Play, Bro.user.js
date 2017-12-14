@@ -1,19 +1,14 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.5.0
+// @version      1.5.1
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
-// @require      https://greasemonkey.github.io/gm4-polyfill/gm4-polyfill.js
 // @grant        GM_xmlhttpRequest
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
-// @grant        GM.xmlhttpRequest
-// @grant        GM.getValue
-// @grant        GM.setValue
-// @grant        GM.deleteValue
 // @connect      self
 // @connect      api.steampowered.com
 // @connect      store.steampowered.com
@@ -23,7 +18,7 @@
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,5,0];
+var CURRENT_VERSION = [1,5,1];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
