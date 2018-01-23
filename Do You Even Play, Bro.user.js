@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.5.2
+// @version      1.6.0
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -12,13 +12,14 @@
 // @connect      self
 // @connect      api.steampowered.com
 // @connect      store.steampowered.com
+// @connect      howlongtobeat.com
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery/1.10.0/jquery.min.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/jquery-sparklines/2.1.2/jquery.sparkline.js
 // @updateURL    https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.meta.js
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,5,2];
+var CURRENT_VERSION = [1,6,0];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
@@ -26,6 +27,7 @@ var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/htt
 var WINS_URL = "https://www.steamgifts.com/user/" + username + "/giveaways/won/search";
 var PLAYTIME_URL = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"; // takes a steamid and API key
 var ACHIEVEMENTS_URL = "https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v0001/"; // takes a steamid, appid and API key
+var HLTB_URL = "https://howlongtobeat.com/search_main.php"; // takes a (POST) queryString and (GET) page number
 var STEAM_API_KEY = GM_getValue("DYEPB_API_KEY");
 var API_KEY_REGEXP = /[0-9A-Z]{32}/;
 var WAIT_MILLIS = 500;
@@ -37,12 +39,17 @@ var PLAYTIME_CACHE_KEY = "DYEPB_PLAYTIME_CACHE_" + encodeURIComponent(username),
     USER_CACHE_VERSION_KEY = "DYEPB_USER_CACHE_VERSION_" + encodeURIComponent(username),
     SUB_APPID_CACHE_KEY = "DYEPB_SUB_APPID_CACHE",
     SUB_APPID_CACHE_VERSION_KEY = "DYEPB_SUB_APPID_CACHE_VERSION",
-    CHART_TEXT_PREFERENCE = "DYEPB_CHART_TEXT";
+    CHART_TEXT_PREFERENCE = "DYEPB_CHART_TEXT",
+    EXPECTED_PLAYTIME_CACHE_KEY = "DYEPB_HLTB_CACHE";
 
 var $percentage = $('<div class="featured__table__row__right"></div>'),
     $average_total_playtime = $('<div class="featured__table__row__right"></div>'),
     $playtime_any_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $playtime_5_10_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
+    $playtime_expectation_below = $('<span></span>'),
+    $playtime_expectation_between = $('<span></span>'),
+    $playtime_expectation_above = $('<span></span>'),
+    $playtime_expectation = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $achievement_any_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $achievement_counts_chart = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $achievement_25_100_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
@@ -60,6 +67,7 @@ var playtimeCache = {},
     achievementCache = {},
     winsCache = {},
     subAppIdsCache = {},
+    expectedPlaytimeCache = {},
     activeRequests = 0,
     errorCount = 0,
     run_status = "STOPPED"; // can be STOPPED, PLAYTIME, WON_GAMES, ACHIEVEMENTS
@@ -81,6 +89,9 @@ if(JSON.parse(GM_getValue(USER_CACHE_VERSION_KEY, "[0,0,0]")) > [1,3,2]) { // Ig
             winsCache = tempWinsCache;
         }
     }
+    if(GM_getValue(EXPECTED_PLAYTIME_CACHE_KEY)) {
+        expectedPlaytimeCache = JSON.parse(GM_getValue(EXPECTED_PLAYTIME_CACHE_KEY));
+    }
 }
 if(GM_getValue(SUB_APPID_CACHE_KEY)) {
     if(JSON.parse(GM_getValue(SUB_APPID_CACHE_VERSION_KEY, "[0,0,0]")) > [1,3,2]) { // Ignore caches from versions older than 1.3.3
@@ -91,7 +102,7 @@ if(GM_getValue(SUB_APPID_CACHE_KEY)) {
 var errorFn = function(response) {
     activeRequests -= 1;
     errorCount += 1;
-    console.log("Error details: ", response.status, response.responseText);
+    console.log("Error details: ", response);
 };
 
 var maxIndex = function(arr, val) {
@@ -101,6 +112,13 @@ var maxIndex = function(arr, val) {
         i--;
     }
     return 0;
+};
+
+var summaryStats = function(arr) {
+    var total = arr.reduce(function(x, y) { return x + y; }, 0),
+        min = Math.min(...arr),
+        max = Math.max(...arr);
+    return {"min": min, "median": (min + max) / 2, "mean": total / arr.length, "max": max, "total": total} ;
 };
 
 var formatPercentage = function(x, per, precision) {
@@ -130,13 +148,44 @@ var formatMinutes = function(mins) {
     }
 };
 
-var enhanceRow = function($heading, minutesPlayed, achievementCounts, appid) {
-    var $playtimeSpan = $heading.find(".dyegb_playtime"), $achievementSpan = $heading.find(".dyegb_achievement");
+var formatMinutesRange = function(min, max) {
+    var min_time = formatMinutes(min),
+        max_time = formatMinutes(max);
+    if(min_time == max_time) {
+        return min_time;
+    } else {
+        if(min_time.substr(-5) == max_time.substr(-5)) {
+            min_time = min_time.replace(/ .*$/, "");
+        }
+        return min_time + "-" + max_time;
+    }
+};
+
+var parseHLTBPlaytime = function(time) {
+    if(time === "--") {
+        return null;
+    }
+    time = time.replace(/½/, ".5");
+    return parseFloat(time) * 60;
+};
+
+var enhanceRow = function($heading, minutesPlayed, achievementCounts, minExpectedPlaytime, maxExpectedPlaytime, appid, hltbid) {
+    var $playtimeSpan = $heading.find(".dyegb_playtime"), $achievementSpan = $heading.find(".dyegb_achievement"), $expectedPlaytimeSpan = $heading.find(".dyegb_exp_playtime");
     if(minutesPlayed) {
         if($playtimeSpan.length > 0) {
             $playtimeSpan.text(formatMinutes(minutesPlayed));
         } else {
             $heading.append('<span class="dyegb_playtime giveaway__heading__thin">' + formatMinutes(minutesPlayed) + '</span>');
+        }
+    }
+    if(hltbid) {
+        if($expectedPlaytimeSpan.length > 0) {
+            $expectedPlaytimeSpan.find(".dyegb_exp_playtime_value").text(formatMinutesRange(minExpectedPlaytime, maxExpectedPlaytime));
+        } else {
+            $heading.append('<span class="dyegb_exp_playtime giveaway__heading__thin"><abbr title="How Long To Beat">HLTB:</abbr> ' +
+                            '<a target="_blank" href="https://howlongtobeat.com/game.php?id=' +
+                            hltbid + '"><span class="dyegb_exp_playtime_value">' +
+                            formatMinutesRange(minExpectedPlaytime, maxExpectedPlaytime) + '</span></a></span>');
         }
     }
     if(achievementCounts && achievementCounts.total > 0) {
@@ -168,7 +217,8 @@ var enhanceWonGames = function() {
         if($ga_icon && $ga_icon.attr("href")) {
             var id = $ga_icon.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
             if(id[1] == "sub" || id[1] == "subs") {
-                var totalMinutes = 0, totalAchievements = {achieved: 0, total: 0}, bestAppid = null, topCompletion = null;
+                var totalMinutes = 0, totalAchievements = {achieved: 0, total: 0}, bestAchievementAppid = null, topCompletion = null,
+                    minExpectedPlaytime = 0, maxExpectedPlaytime = 0, highestExpectedPlaytime = null, bestPlaytimeId = null;
                 if(subAppIdsCache['s'+id[2]]) {
                     var appids = subAppIdsCache['s'+id[2]];
                     for(var i = 0; i < appids.length; i++) {
@@ -180,15 +230,32 @@ var enhanceWonGames = function() {
                             totalAchievements.total += achievementCache['a'+appids[i]].total;
                             if(topCompletion === null || achievementCache['a'+appids[i]].achieved / achievementCache['a'+appids[i]].total > topCompletion) {
                                 topCompletion = achievementCache['a'+appids[i]].achieved / achievementCache['a'+appids[i]].total;
-                                bestAppid = appids[i];
+                                bestAchievementAppid = appids[i];
+                            }
+                        }
+                        if(expectedPlaytimeCache['a'+appids[i]]) {
+                            var substats = summaryStats(expectedPlaytimeCache['a'+appids[i]].times);
+                            minExpectedPlaytime += substats.min;
+                            maxExpectedPlaytime += substats.max;
+                            if(highestExpectedPlaytime === null || maxExpectedPlaytime > highestExpectedPlaytime) {
+                                highestExpectedPlaytime = maxExpectedPlaytime;
+                                bestPlaytimeId = expectedPlaytimeCache['a'+appids[i]].hltb_id;
                             }
                         }
                     }
                 }
-                enhanceRow($heading, totalMinutes, totalAchievements, bestAppid);
+                enhanceRow($heading, totalMinutes, totalAchievements, minExpectedPlaytime, maxExpectedPlaytime, bestAchievementAppid, bestPlaytimeId);
             }
             if(id[1] == "app" || id[1] == "apps") {
-                enhanceRow($heading, playtimeCache['a'+id[2]], achievementCache['a'+id[2]], id[2]);
+                if(expectedPlaytimeCache['a'+id[2]]) {
+                    var stats = {};
+                    if(expectedPlaytimeCache['a'+id[2]].times.length > 0) {
+                        stats = summaryStats(expectedPlaytimeCache['a'+id[2]].times);
+                    }
+                    enhanceRow($heading, playtimeCache['a'+id[2]], achievementCache['a'+id[2]], stats.min, stats.max, id[2], expectedPlaytimeCache['a'+id[2]].hltb_id);
+                } else {
+                    enhanceRow($heading, playtimeCache['a'+id[2]], achievementCache['a'+id[2]], undefined, undefined, id[2], undefined);
+                }
             }
         }
     });
@@ -198,13 +265,15 @@ var updateTableStats = function() {
     var achievement_percentage_sum = 0, achievement_game_count = 0, achieved_game_count = 0,
         achieved_game_count_25 = 0, achieved_game_count_100 = 0, achieved_game_cumulative = [],
         playtime_total = 0, playtime_game_count = 0, playtime_game_count_5h = 0, playtime_game_count_10h = 0,
-        win_count = 0, achievement_playtime_total = 0, achievement_playtime_count = 0;
+        win_count = 0, achievement_playtime_total = 0, achievement_playtime_count = 0,
+        expected_less_than_min = 0, expected_total_less_distance = 0, expected_between_min_max = 0, expected_greater_than_max = 0, expected_total_greater_distance = 0,
+        expected_playtime_count = 0, expected_below = "", expected_between = "", expected_above = "";
     var i = 0;
     while(i < 101) {
         achieved_game_cumulative[i] = 0;
         i++;
     }
-    $.each(winsCache, function(aid, appid) {
+    $.each(winsCache, function(aid, details) {
         var achievement_counts = achievementCache[aid];
         if(achievement_counts && achievement_counts.total > 0) {
             achievement_game_count += 1;
@@ -237,6 +306,22 @@ var updateTableStats = function() {
             if(playtimeCache[aid] >= 600) {
                 playtime_game_count_10h += 1;
             }
+            if(expectedPlaytimeCache[aid] && expectedPlaytimeCache[aid].times.length > 0) {
+                expected_playtime_count += 1;
+                var stats = summaryStats(expectedPlaytimeCache[aid].times);
+                if(playtimeCache[aid] < stats.min) {
+                    expected_less_than_min += 1;
+                    expected_total_less_distance += stats.min - playtimeCache[aid];
+                    expected_below += details.name + "\n";
+                } else if(playtimeCache[aid] > stats.max) {
+                    expected_greater_than_max += 1;
+                    expected_total_greater_distance += playtimeCache[aid] - stats.max;
+                    expected_above += details.name + "\n";
+                } else {
+                    expected_between_min_max += 1;
+                    expected_between += details.name + "\n";
+                }
+            }
         }
         if(achievement_counts && achievement_counts.total > 0 && playtimeCache[aid]) {
             achievement_playtime_total += playtimeCache[aid];
@@ -247,6 +332,21 @@ var updateTableStats = function() {
         $percentage.text(formatPercentage(achievement_percentage_sum, achieved_game_count, 3));
     } else {
         $percentage.text("N/A");
+    }
+    if(expected_playtime_count > 0) {
+        $playtime_expectation.empty();
+        $playtime_expectation.append($playtime_expectation_below);
+        $playtime_expectation.append($playtime_expectation_between);
+        $playtime_expectation.append($playtime_expectation_above);
+        $playtime_expectation_below.text(expected_less_than_min + ' below (' + formatMinutes(expected_total_less_distance / expected_less_than_min) + ' avg.), ');
+        $playtime_expectation_below.attr("title", expected_below.replace(/\n$/, ""));
+        $playtime_expectation_between.text(expected_between_min_max + ' between, ');
+        $playtime_expectation_between.attr("title", expected_between.replace(/\n$/, ""));
+        $playtime_expectation_above.text(expected_greater_than_max + ' above (' + formatMinutes(expected_total_greater_distance / expected_greater_than_max) + ' avg.)');
+        $playtime_expectation_above.attr("title", expected_above.replace(/\n$/, ""));
+    } else {
+        $playtime_expectation.empty();
+        $playtime_expectation.text("N/A");
     }
     if(playtime_game_count !== win_count) {
         $average_total_playtime.text(formatMinutes(playtime_total / win_count) + ' per win, ' +
@@ -321,7 +421,7 @@ var displayButtons = function() {
         } else if(run_status == "WON_GAMES") {
             $progress_text.text("Retrieving " + username + "'s won games");
         } else if(run_status == "ACHIEVEMENTS") {
-            $progress_text.text("Retrieving " + username + "'s achievement progress (" + activeRequests + " games left to check)");
+            $progress_text.text("Retrieving " + username + "'s achievement and HLTB progress (" + activeRequests + " games left to check)");
         }
         $last_updated.hide();
         $rm_key_link.hide();
@@ -342,9 +442,9 @@ var extractSubGames = function(sub, page) {
             appId = $this.attr("data-ds-appid"),
             name = $this.find(".tab_item_name").text(),
             $link = $this.find(".tab_item_overlay");
-        if($link.attr("href") && !winsCache['a'+appId]) {
+        if($link.attr("href") && (!winsCache['a'+appId] || !winsCache['a'+appId].appid)) {
             var type = $link.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/[0-9]*\//);
-            winsCache['a'+appId] = appId;
+            winsCache['a'+appId] = {'appid': appId, 'name': name};
         }
         subAppIdsCache['s'+sub].push(appId);
     });
@@ -357,11 +457,16 @@ var extractWon = function(page) {
             return $(this).find("div.giveaway__column--positive").length == 1;
         })
         .each(function(i, e) {
-            var $ga_icon = $(e).find("a.giveaway__icon:has(i.fa-steam)");
+            var $ga_name = $(e).find("a.giveaway__heading__name"),
+                $ga_icon = $(e).find("a.giveaway__icon:has(i.fa-steam)");
             if($ga_icon.length === 1 && $ga_icon.attr("href")) {
                 var url = $ga_icon.attr("href"),
-                    id = url.match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
-                if((id[1] == "sub" || id[1] == "subs") && !subAppIdsCache['s'+id[2]]) { // only fetch appids for uncached-subs - do subs ever change? Probably...
+                    id = url.match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//),
+                    name = $ga_name.text();
+                if(name.endsWith("...") && name.length > 3) {
+                    name = name.substr(0, name.length - 3);
+                }
+                if((id[1] == "sub" || id[1] == "subs") && (!subAppIdsCache['s'+id[2]] || subAppIdsCache['s'+id[2]].length === 0|| !subAppIdsCache['s'+id[2]][0].appid)) { // only fetch appids for uncached-subs - do subs ever change? Probably...
                     activeRequests += 1;
                     GM_xmlhttpRequest({
                         "method": "GET",
@@ -379,8 +484,8 @@ var extractWon = function(page) {
                         "ontimeout": errorFn
                     });
                     extractCount += 1;
-                } else if((id[1] == "app" || id[1] == "apps") && !winsCache['a'+id[2]]) {
-                    winsCache['a'+id[2]] = id[2];
+                } else if((id[1] == "app" || id[1] == "apps") && (!winsCache['a'+id[2]] || !winsCache['a'+id[2]].appid)) {
+                    winsCache['a'+id[2]] = {'appid': id[2], 'name': name};
                     extractCount += 1;
                 }
             }
@@ -425,7 +530,6 @@ var fetchGamePlaytimes = function(steamID64, callback) {
             }
             if(data) {
                 var games = data.response.games;
-                console.log(games);
                 if(games) {
                     for(var i = 0; i < games.length; i++) {
                         playtimeCache["a"+games[i].appid] = games[i].playtime_forever;
@@ -472,6 +576,48 @@ var fetchAchievementStatsFn = function(appid, steamID64) {
     };
 };
 
+var fetchExpectedPlaytimes = function(appid, game_name) {
+    return function() {
+        if(game_name.match(/[^\w\s-_:]/)) {
+            game_name = game_name.replace(/[^-\w\s_:]/g, "");
+        }
+        GM_xmlhttpRequest({
+            "method": "POST",
+            "url": HLTB_URL + '?page=1',
+            "headers": {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'accept': '*/*'
+            },
+            "data": 'queryString='+encodeURIComponent(game_name)+'&t=games&sorthead=popular&sortd=Normal&20Order&plat=PC&length_type=main&length_min=&length_max=&detail=0',
+            "onload": function(response) {
+                var data = {"cache_date": Date.now()};
+                try {
+                    var $result = $('<ul>' + response.responseText + '</ul>').find('li:first');
+                    if($result.text().startsWith("No results for")) {
+                        data.search_term = $result.find("strong:first").text();
+                        data.times = [];
+                        console.log("Could not find details for:", data.search_term);
+                    } else {
+                        var times = $result.find(".search_list_details_block .search_list_tidbit").filter(":odd").map(function() { return $(this).text(); }).get(),
+                            $game_link = $result.find("h3.shadow_text a");
+                        data.search_term = game_name;
+                        data.hltb_game = $game_link.text();
+                        data.hltb_id = $game_link.attr('href').replace(/^game\.php\?id=/g, '');
+                        data.times = times.map(parseHLTBPlaytime).filter(function(x) { return x !== null; });
+                    }
+                    expectedPlaytimeCache['a'+appid] = data;
+                    activeRequests -= 1;
+                } catch(err) {
+                    errorFn({"status": response.status, "responseText": response.responseText, "error": err.message});
+                }
+            },
+            "onabort": errorFn,
+            "onerror": errorFn,
+            "ontimeout": errorFn
+        });
+    };
+};
+
 var cacheJSONValue = function(key, value) {
     GM_setValue(key, JSON.stringify(value));
     var updateTime = new Date();
@@ -509,6 +655,8 @@ var cacheJSONValue = function(key, value) {
     $left_row_2.append($playtime_any_counts);
     $left_row_3.append('<div class="featured__table__row__left">Games with Playtime...</div>');
     $left_row_3.append($playtime_5_10_counts);
+    $left_row_4.append('<div class="featured__table__row__left">Compared to HLTB Estimates</div>');
+    $left_row_4.append($playtime_expectation);
     $right_row_1.append('<div class="featured__table__row__left">Avg. Achievement Percentage</div>');
     $right_row_1.append($percentage);
     $right_row_2.append('<div class="featured__table__row__left">Games with ≥1 Achievement</div>');
@@ -525,7 +673,7 @@ var cacheJSONValue = function(key, value) {
         $achievement_25_100_counts.hide();
         $chart_text_switch.text('text');
     }
-    $featured_table_col1.append($left_row_1).append($left_row_2).append($left_row_3);
+    $featured_table_col1.append($left_row_1).append($left_row_2).append($left_row_3).append($left_row_4);
     $featured_table_col2.append($right_row_1).append($right_row_2).append($right_row_3);
     $featured_table.after($toolbar);
 
@@ -587,10 +735,21 @@ var cacheJSONValue = function(key, value) {
                         cacheJSONValue(SUB_APPID_CACHE_KEY, subAppIdsCache);
                         GM_setValue(SUB_APPID_CACHE_VERSION_KEY, JSON.stringify(CURRENT_VERSION));
                         var i = 0;
-                        $.each(winsCache, function(id, appid) {
+                        $.each(winsCache, function(id, details) {
                             activeRequests += 1;
+                            if(details.name) {
+                                setTimeout(fetchAchievementStatsFn(details.appid, userID64), i * 50);
+                                // only update individual games expected playtime cache if tha data is missing or >30 days old
+                                if(!expectedPlaytimeCache['a'+details.appid] || expectedPlaytimeCache['a'+details.appid].cache_date < Date.now() - 2592000000) {
+                                    activeRequests += 1;
+                                    setTimeout(fetchExpectedPlaytimes(details.appid, details.name), i * 1000); // rate limit data requests
+                                }
+                            } else if(details.appid) {
+                                setTimeout(fetchAchievementStatsFn(details.appid, userID64), i * 50);
+                            } else { // if details is not an object with an attribute name or an appid, it's probably an appid itself
+                                setTimeout(fetchAchievementStatsFn(details, userID64), i * 50);
+                            }
                             // increment delay to try to prevent overloading of Steam API
-                            setTimeout(fetchAchievementStatsFn(appid, userID64), i * 50);
                             i += 1;
                         });
                         intervalId = setInterval(function() {
@@ -598,6 +757,7 @@ var cacheJSONValue = function(key, value) {
                                 clearInterval(intervalId);
                                 run_status = "STOPPED";
                                 cacheJSONValue(ACHIEVEMENT_CACHE_KEY, achievementCache);
+                                cacheJSONValue(EXPECTED_PLAYTIME_CACHE_KEY, expectedPlaytimeCache);
                                 GM_setValue(USER_CACHE_VERSION_KEY, JSON.stringify(CURRENT_VERSION));
                                 console.log("Errors during API queries:", errorCount);
                             } else {
