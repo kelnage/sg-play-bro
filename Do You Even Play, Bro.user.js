@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.6.0
+// @version      1.6.1
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -19,7 +19,7 @@
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,6,0];
+var CURRENT_VERSION = [1,6,1];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
@@ -40,7 +40,8 @@ var PLAYTIME_CACHE_KEY = "DYEPB_PLAYTIME_CACHE_" + encodeURIComponent(username),
     SUB_APPID_CACHE_KEY = "DYEPB_SUB_APPID_CACHE",
     SUB_APPID_CACHE_VERSION_KEY = "DYEPB_SUB_APPID_CACHE_VERSION",
     CHART_TEXT_PREFERENCE = "DYEPB_CHART_TEXT",
-    EXPECTED_PLAYTIME_CACHE_KEY = "DYEPB_HLTB_CACHE";
+    EXPECTED_PLAYTIME_CACHE_KEY = "DYEPB_HLTB_CACHE",
+    DISABLE_HLTB_KEY = "DYEPB_DISABLE_HLTB";
 
 var $percentage = $('<div class="featured__table__row__right"></div>'),
     $average_total_playtime = $('<div class="featured__table__row__right"></div>'),
@@ -54,13 +55,16 @@ var $percentage = $('<div class="featured__table__row__right"></div>'),
     $achievement_counts_chart = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $achievement_25_100_counts = $('<div class="featured__table__row__right" style="text-align: right"></div>'),
     $last_updated = $('<span title="" style="color: rgba(255,255,255,0.4)"></span>'),
+    $disable_hltb = $('<input type="checkbox" id="disable_hltb" name="disable_hltb" value="disable_hltb" style="width: auto; margin: 0px 0.5em">'),
+    $hltb_left_row = $('<div class="featured__table__row"></div>'),
     $progress_text = $('<span style="margin-left: 0.3em"></span>'),
     $rm_key_link = $('<a style="margin-left: 0.5em;color: rgba(255,255,255,0.6)" href="#">Delete cached API key</a>'),
     $toolbar = $('<div id="sg_dyepb_toolbar" style="color: rgba(255,255,255,0.4)" class="nav__left-container"></div>'),
     $fetch_button = $('<a class="nav__button" href="#">' + (GM_getValue(LAST_CACHE_KEY) ? 'Update Playing Info' : 'Fetch Playing Info' ) + '</a>'),
     $key_button = $('<a class="nav__button" href="#">Provide API Key</a>'),
     $button_container = $('<div class="nav__button-container"></div>'),
-    $progress_container = $('<div id="progress" style="margin: 0.5em 0"><img src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/0.16.1/images/loader-large.gif" height="10px" width="10px" /></div>'),
+    $hltb_status_container = $('<div id="dyepb_hltb_status"></div>'),
+    $progress_container = $('<div id="dyepb_progress" style="margin: 0.5em 0"><img src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/0.16.1/images/loader-large.gif" height="10px" width="10px" /></div>'),
     $chart_text_switch = $('<a href="#" style="font-size: smaller">chart</a>');
 
 var playtimeCache = {},
@@ -169,24 +173,43 @@ var parseHLTBPlaytime = function(time) {
     return parseFloat(time) * 60;
 };
 
-var enhanceRow = function($heading, minutesPlayed, achievementCounts, minExpectedPlaytime, maxExpectedPlaytime, appid, hltbid) {
+var enhanceRow = function($heading, minutesPlayed, achievementCounts, minExpectedPlaytime, maxExpectedPlaytime, appid, hltb_id, hltb_game) {
     var $playtimeSpan = $heading.find(".dyegb_playtime"), $achievementSpan = $heading.find(".dyegb_achievement"), $expectedPlaytimeSpan = $heading.find(".dyegb_exp_playtime");
     if(minutesPlayed) {
         if($playtimeSpan.length > 0) {
             $playtimeSpan.text(formatMinutes(minutesPlayed));
         } else {
-            $heading.append('<span class="dyegb_playtime giveaway__heading__thin">' + formatMinutes(minutesPlayed) + '</span>');
+            $playtimeSpan = $('<span class="dyegb_playtime giveaway__heading__thin">' + formatMinutes(minutesPlayed) + '</span>');
+            $heading.append($playtimeSpan);
         }
     }
-    if(hltbid) {
+    if(hltb_id) {
         if($expectedPlaytimeSpan.length > 0) {
-            $expectedPlaytimeSpan.find(".dyegb_exp_playtime_value").text(formatMinutesRange(minExpectedPlaytime, maxExpectedPlaytime));
-        } else {
-            $heading.append('<span class="dyegb_exp_playtime giveaway__heading__thin"><abbr title="How Long To Beat">HLTB:</abbr> ' +
-                            '<a target="_blank" href="https://howlongtobeat.com/game.php?id=' +
-                            hltbid + '"><span class="dyegb_exp_playtime_value">' +
-                            formatMinutesRange(minExpectedPlaytime, maxExpectedPlaytime) + '</span></a></span>');
+            if(minExpectedPlaytime) {
+                $expectedPlaytimeSpan.find(".dyegb_exp_playtime_value").text(formatMinutesRange(minExpectedPlaytime, maxExpectedPlaytime));
+            } else {
+                $expectedPlaytimeSpan.remove();
+            }
+        } else if(minExpectedPlaytime) {
+            if($playtimeSpan.length > 0) {
+                $expectedPlaytimeSpan = $('<span class="dyegb_exp_playtime giveaway__heading__thin" title="HLTB stats for ' +
+                                          hltb_game + '"><a target="_blank" href="https://howlongtobeat.com/game.php?id=' +
+                                          hltb_id + '">(<span class="dyegb_exp_playtime_value">' +
+                                          formatMinutesRange(minExpectedPlaytime, maxExpectedPlaytime) + '</span>)</a></span>');
+                $playtimeSpan.append($expectedPlaytimeSpan);
+            } else {
+                $expectedPlaytimeSpan = $('<span class="dyegb_exp_playtime giveaway__heading__thin" title="HLTB stats for ' +
+                                          hltb_game + '">HLTB: <a target="_blank" href="https://howlongtobeat.com/game.php?id=' +
+                                          hltb_id + '"><span class="dyegb_exp_playtime_value">' +
+                                          formatMinutesRange(minExpectedPlaytime, maxExpectedPlaytime) + '</span></a></span>');
+                $heading.append($expectedPlaytimeSpan);
+            }
         }
+    }
+    if(GM_getValue(DISABLE_HLTB_KEY, false)) {
+        $expectedPlaytimeSpan.css("display", "none");
+    } else {
+        $expectedPlaytimeSpan.css("display", "inline");
     }
     if(achievementCounts && achievementCounts.total > 0) {
         if($achievementSpan.length === 0) {
@@ -218,7 +241,7 @@ var enhanceWonGames = function() {
             var id = $ga_icon.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
             if(id[1] == "sub" || id[1] == "subs") {
                 var totalMinutes = 0, totalAchievements = {achieved: 0, total: 0}, bestAchievementAppid = null, topCompletion = null,
-                    minExpectedPlaytime = 0, maxExpectedPlaytime = 0, highestExpectedPlaytime = null, bestPlaytimeId = null;
+                    minExpectedPlaytime = 0, maxExpectedPlaytime = 0, highestExpectedPlaytime = null, bestPlaytimeId = null, bestPlaytimeGame = null;
                 if(subAppIdsCache['s'+id[2]]) {
                     var appids = subAppIdsCache['s'+id[2]];
                     for(var i = 0; i < appids.length; i++) {
@@ -240,11 +263,12 @@ var enhanceWonGames = function() {
                             if(highestExpectedPlaytime === null || maxExpectedPlaytime > highestExpectedPlaytime) {
                                 highestExpectedPlaytime = maxExpectedPlaytime;
                                 bestPlaytimeId = expectedPlaytimeCache['a'+appids[i]].hltb_id;
+                                bestPlaytimeGame = expectedPlaytimeCache['a'+appids[i]].hltb_game;
                             }
                         }
                     }
                 }
-                enhanceRow($heading, totalMinutes, totalAchievements, minExpectedPlaytime, maxExpectedPlaytime, bestAchievementAppid, bestPlaytimeId);
+                enhanceRow($heading, totalMinutes, totalAchievements, minExpectedPlaytime, maxExpectedPlaytime, bestAchievementAppid, bestPlaytimeId, bestPlaytimeGame);
             }
             if(id[1] == "app" || id[1] == "apps") {
                 if(expectedPlaytimeCache['a'+id[2]]) {
@@ -252,9 +276,9 @@ var enhanceWonGames = function() {
                     if(expectedPlaytimeCache['a'+id[2]].times.length > 0) {
                         stats = summaryStats(expectedPlaytimeCache['a'+id[2]].times);
                     }
-                    enhanceRow($heading, playtimeCache['a'+id[2]], achievementCache['a'+id[2]], stats.min, stats.max, id[2], expectedPlaytimeCache['a'+id[2]].hltb_id);
+                    enhanceRow($heading, playtimeCache['a'+id[2]], achievementCache['a'+id[2]], stats.min, stats.max, id[2], expectedPlaytimeCache['a'+id[2]].hltb_id, expectedPlaytimeCache['a'+id[2]].hltb_game);
                 } else {
-                    enhanceRow($heading, playtimeCache['a'+id[2]], achievementCache['a'+id[2]], undefined, undefined, id[2], undefined);
+                    enhanceRow($heading, playtimeCache['a'+id[2]], achievementCache['a'+id[2]], undefined, undefined, id[2], undefined, undefined);
                 }
             }
         }
@@ -306,7 +330,7 @@ var updateTableStats = function() {
             if(playtimeCache[aid] >= 600) {
                 playtime_game_count_10h += 1;
             }
-            if(expectedPlaytimeCache[aid] && expectedPlaytimeCache[aid].times.length > 0) {
+            if(playtimeCache[aid] > 0 && expectedPlaytimeCache[aid] && expectedPlaytimeCache[aid].times.length > 0) {
                 expected_playtime_count += 1;
                 var stats = summaryStats(expectedPlaytimeCache[aid].times);
                 if(playtimeCache[aid] < stats.min) {
@@ -379,6 +403,11 @@ var updateTableStats = function() {
         ' (' + achieved_game_count_25 + '/' + achievement_game_count +
         '), completed: ' + formatPercentage(achieved_game_count_100, achievement_game_count, 3) +
         ' (' + achieved_game_count_100 + '/' + achievement_game_count + ')');
+    if(GM_getValue(DISABLE_HLTB_KEY, false)) {
+        $hltb_left_row.css("display", "none");
+    } else {
+        $hltb_left_row.css("display", "flex");
+    }
 };
 
 var updateDisplayedCacheDate = function(t) {
@@ -391,6 +420,7 @@ var updateDisplayedCacheDate = function(t) {
 var displayButtons = function() {
     if(!API_KEY_REGEXP.test(STEAM_API_KEY)) {
         $button_container.show();
+        $hltb_status_container.hide();
         $progress_container.hide();
         $key_button.show();
         $fetch_button.hide();
@@ -401,6 +431,7 @@ var displayButtons = function() {
         $rm_key_link.hide();
     } else if(run_status == "STOPPED") {
         $button_container.show();
+        $hltb_status_container.show();
         $progress_container.hide();
         $fetch_button.show();
         $key_button.hide();
@@ -415,13 +446,14 @@ var displayButtons = function() {
         $rm_key_link.show();
     } else {
         $button_container.hide();
+        $hltb_status_container.hide();
         $progress_container.show();
         if(run_status == "PLAYTIMES") {
             $progress_text.text("Retrieving " + username + "'s logged playing times");
         } else if(run_status == "WON_GAMES") {
             $progress_text.text("Retrieving " + username + "'s won games");
         } else if(run_status == "ACHIEVEMENTS") {
-            $progress_text.text("Retrieving " + username + "'s achievement and HLTB progress (" + activeRequests + " games left to check)");
+            $progress_text.text("Retrieving " + username + "'s achievement " + (GM_getValue(DISABLE_HLTB_KEY, false) ? '' : 'and HLTB ') + "progress (" + activeRequests + " games left to check)");
         }
         $last_updated.hide();
         $rm_key_link.hide();
@@ -635,16 +667,15 @@ var cacheJSONValue = function(key, value) {
     var $left_row_1 = $('<div class="featured__table__row"></div>'),
         $left_row_2 = $('<div class="featured__table__row"></div>'),
         $left_row_3 = $('<div class="featured__table__row"></div>'),
-        $left_row_4 = $('<div class="featured__table__row"></div>'),
-        $left_row_5 = $('<div class="featured__table__row"></div>'),
         $right_row_1 = $('<div class="featured__table__row"></div>'),
         $right_row_2 = $('<div class="featured__table__row"></div>'),
-        $right_row_3 = $('<div class="featured__table__row"></div>'),
-        $right_row_4 = $('<div class="featured__table__row"></div>'),
-        $right_row_5 = $('<div class="featured__table__row"></div>');
+        $right_row_3 = $('<div class="featured__table__row"></div>');
     $toolbar.append($button_container);
     $button_container.append($key_button);
     $button_container.append($fetch_button);
+    $toolbar.append($hltb_status_container);
+    $hltb_status_container.append($disable_hltb);
+    $hltb_status_container.append('<label style="margin-right: 0.5em" for="disable_hltb">Disable HLTB enrichment?</label>');
     $toolbar.append($progress_container);
     $progress_container.append($progress_text);
     $toolbar.append($last_updated);
@@ -655,8 +686,8 @@ var cacheJSONValue = function(key, value) {
     $left_row_2.append($playtime_any_counts);
     $left_row_3.append('<div class="featured__table__row__left">Games with Playtime...</div>');
     $left_row_3.append($playtime_5_10_counts);
-    $left_row_4.append('<div class="featured__table__row__left">Compared to HLTB Estimates</div>');
-    $left_row_4.append($playtime_expectation);
+    $hltb_left_row.append('<div class="featured__table__row__left">Compared to HLTB Estimates</div>');
+    $hltb_left_row.append($playtime_expectation);
     $right_row_1.append('<div class="featured__table__row__left">Avg. Achievement Percentage</div>');
     $right_row_1.append($percentage);
     $right_row_2.append('<div class="featured__table__row__left">Games with ≥1 Achievement</div>');
@@ -673,11 +704,21 @@ var cacheJSONValue = function(key, value) {
         $achievement_25_100_counts.hide();
         $chart_text_switch.text('text');
     }
-    $featured_table_col1.append($left_row_1).append($left_row_2).append($left_row_3).append($left_row_4);
+    if(GM_getValue(DISABLE_HLTB_KEY, false)) {
+        $disable_hltb.prop("checked", true);
+    } else {
+        $disable_hltb.prop("checked", false);
+    }
+    $featured_table_col1.append($left_row_1).append($left_row_2).append($left_row_3).append($hltb_left_row);
     $featured_table_col2.append($right_row_1).append($right_row_2).append($right_row_3);
     $featured_table.after($toolbar);
 
     updatePage(GM_getValue(LAST_CACHE_KEY) ? new Date(GM_getValue(LAST_CACHE_KEY)) : null);
+
+    $disable_hltb.change(function(e) {
+        GM_setValue(DISABLE_HLTB_KEY, this.checked);
+        updatePage();
+    });
 
     $chart_text_switch.click(function(e) {
         e.preventDefault();
@@ -740,7 +781,7 @@ var cacheJSONValue = function(key, value) {
                             if(details.name) {
                                 setTimeout(fetchAchievementStatsFn(details.appid, userID64), i * 50);
                                 // only update individual games expected playtime cache if tha data is missing or >30 days old
-                                if(!expectedPlaytimeCache['a'+details.appid] || expectedPlaytimeCache['a'+details.appid].cache_date < Date.now() - 2592000000) {
+                                if(!GM_getValue(DISABLE_HLTB_KEY, false) && (!expectedPlaytimeCache['a'+details.appid] || expectedPlaytimeCache['a'+details.appid].cache_date < Date.now() - 2592000000)) {
                                     activeRequests += 1;
                                     setTimeout(fetchExpectedPlaytimes(details.appid, details.name), i * 1000); // rate limit data requests
                                 }
