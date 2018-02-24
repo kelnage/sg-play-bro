@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.6.2
+// @version      1.6.3
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -19,7 +19,7 @@
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,6,2];
+var CURRENT_VERSION = [1,6,3];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
@@ -58,7 +58,7 @@ var $percentage = $('<div class="featured__table__row__right"></div>'),
     $disable_hltb = $('<input type="checkbox" id="disable_hltb" name="disable_hltb" value="disable_hltb" style="width: auto; margin: 0px 0.5em">'),
     $hltb_left_row = $('<div class="featured__table__row"></div>'),
     $progress_text = $('<span style="margin-left: 0.3em"></span>'),
-    $rm_key_link = $('<a style="margin-left: 0.5em;color: rgba(255,255,255,0.6)" href="#">Delete cached API key</a>'),
+    $rm_key_link = $('<a style="margin-left: 0.5em;color: rgba(255,255,255,0.6)" href="#">Delete cached data</a>'),
     $toolbar = $('<div id="sg_dyepb_toolbar" style="color: rgba(255,255,255,0.4)" class="nav__left-container"></div>'),
     $fetch_button = $('<a class="nav__button" href="#">' + (GM_getValue(LAST_CACHE_KEY) ? 'Update Playing Info' : 'Fetch Playing Info' ) + '</a>'),
     $key_button = $('<a class="nav__button" href="#">Provide API Key</a>'),
@@ -760,7 +760,20 @@ var cacheJSONValue = function(key, value) {
     $rm_key_link.click(function(e) {
         e.preventDefault();
         GM_deleteValue("DYEPB_API_KEY");
+        GM_deleteValue(PLAYTIME_CACHE_KEY);
+        GM_deleteValue(ACHIEVEMENT_CACHE_KEY);
+        GM_deleteValue(WINS_CACHE_KEY);
+        GM_deleteValue(LAST_CACHE_KEY);
+        GM_deleteValue(USER_CACHE_VERSION_KEY);
+        GM_deleteValue(SUB_APPID_CACHE_KEY);
+        GM_deleteValue(SUB_APPID_CACHE_VERSION_KEY);
+        GM_deleteValue(EXPECTED_PLAYTIME_CACHE_KEY);
         STEAM_API_KEY = "";
+        playtimeCache = {};
+        achievementCache = {};
+        winsCache = {};
+        subAppIdsCache = {};
+        expectedPlaytimeCache = {};
         displayButtons();
     });
 
