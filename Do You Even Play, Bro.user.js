@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.6.3
+// @version      1.6.4
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -19,10 +19,10 @@
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,6,3];
+var CURRENT_VERSION = [1,6,4];
 
 var username = $(".featured__heading__medium").text();
-var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/http:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
+var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/https?:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
 
 var WINS_URL = "https://www.steamgifts.com/user/" + username + "/giveaways/won/search";
 var PLAYTIME_URL = "https://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"; // takes a steamid and API key
@@ -244,7 +244,7 @@ var enhanceWonGames = function() {
         var $this = $(this), $heading = $this.find(".giveaway__heading"),
             $ga_icon = $this.find("a.giveaway__icon:has(i.fa-steam)");
         if($ga_icon && $ga_icon.attr("href")) {
-            var id = $ga_icon.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
+            var id = $ga_icon.attr("href").match(/https?:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
             if(id[1] == "sub" || id[1] == "subs") {
                 var totalMinutes = 0, totalAchievements = {achieved: 0, total: 0}, bestAchievementAppid = null, topCompletion = null,
                     minExpectedPlaytime = 0, maxExpectedPlaytime = 0, highestExpectedPlaytime = null, bestPlaytimeId = null, bestPlaytimeGame = null;
@@ -481,7 +481,7 @@ var extractSubGames = function(sub, page) {
             name = $this.find(".tab_item_name").text(),
             $link = $this.find(".tab_item_overlay");
         if($link.attr("href") && (!winsCache['a'+appId] || !winsCache['a'+appId].appid)) {
-            var type = $link.attr("href").match(/http:\/\/store.steampowered.com\/([^\/]*)\/[0-9]*\//);
+            var type = $link.attr("href").match(/https?:\/\/store.steampowered.com\/([^\/]*)\/[0-9]*\//);
             winsCache['a'+appId] = {'appid': appId, 'name': name};
         }
         subAppIdsCache['s'+sub].push(appId);
@@ -499,7 +499,7 @@ var extractWon = function(page) {
                 $ga_icon = $(e).find("a.giveaway__icon:has(i.fa-steam)");
             if($ga_icon.length === 1 && $ga_icon.attr("href")) {
                 var url = $ga_icon.attr("href"),
-                    id = url.match(/http:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//),
+                    id = url.match(/https?:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//),
                     name = $ga_name.text();
                 if(name.endsWith("...") && name.length > 3) {
                     name = name.substr(0, name.length - 3);
