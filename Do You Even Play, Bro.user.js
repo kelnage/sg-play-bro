@@ -244,7 +244,7 @@ var enhanceWonGames = function() {
         var $this = $(this), $heading = $this.find(".giveaway__heading"),
             $ga_icon = $this.find("a.giveaway__icon:has(i.fa-steam)");
         if($ga_icon && $ga_icon.attr("href")) {
-            var id = $ga_icon.attr("href").match(/https?:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//);
+            var id = $ga_icon.attr("href").match(/https?:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)/);
             if(id[1] == "sub" || id[1] == "subs") {
                 var totalMinutes = 0, totalAchievements = {achieved: 0, total: 0}, bestAchievementAppid = null, topCompletion = null,
                     minExpectedPlaytime = 0, maxExpectedPlaytime = 0, highestExpectedPlaytime = null, bestPlaytimeId = null, bestPlaytimeGame = null;
@@ -481,7 +481,7 @@ var extractSubGames = function(sub, page) {
             name = $this.find(".tab_item_name").text(),
             $link = $this.find(".tab_item_overlay");
         if($link.attr("href") && (!winsCache['a'+appId] || !winsCache['a'+appId].appid)) {
-            var type = $link.attr("href").match(/https?:\/\/store.steampowered.com\/([^\/]*)\/[0-9]*\//);
+            var type = $link.attr("href").match(/https?:\/\/store.steampowered.com\/([^\/]*)\/[0-9]*/);
             winsCache['a'+appId] = {'appid': appId, 'name': name};
         }
         subAppIdsCache['s'+sub].push(appId);
@@ -499,7 +499,7 @@ var extractWon = function(page) {
                 $ga_icon = $(e).find("a.giveaway__icon:has(i.fa-steam)");
             if($ga_icon.length === 1 && $ga_icon.attr("href")) {
                 var url = $ga_icon.attr("href"),
-                    id = url.match(/https?:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)\//),
+                    id = url.match(/https?:\/\/store.steampowered.com\/([^\/]*)\/([0-9]*)/),
                     name = $ga_name.text();
                 if(name.endsWith("...") && name.length > 3) {
                     name = name.substr(0, name.length - 3);
