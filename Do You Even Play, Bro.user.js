@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Do You Even Play, Bro?
 // @namespace    https://www.steamgifts.com/user/kelnage
-// @version      1.6.4
+// @version      1.6.5
 // @description  Display playing stats for SteamGifts users
 // @author       kelnage
 // @match        https://www.steamgifts.com/user/*/giveaways/won*
@@ -19,7 +19,7 @@
 // @downloadURL  https://raw.githubusercontent.com/kelnage/sg-play-bro/master/Do%20You%20Even%20Play%2C%20Bro.user.js
 // ==/UserScript==
 
-var CURRENT_VERSION = [1,6,4];
+var CURRENT_VERSION = [1,6,5];
 
 var username = $(".featured__heading__medium").text();
 var userID64 = $('[data-tooltip="Visit Steam Profile"]').attr("href").match(/https?:\/\/steamcommunity.com\/profiles\/([0-9]*)/)[1];
